@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/overlayUssdRunning"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#99000000"
+    android:clickable="true"
+    android:focusable="true"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="?attr/colorSurface"
+        android:elevation="8dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="28dp">
+
+        <ProgressBar
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/ussd_running_overlay"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
+    </LinearLayout>
+</FrameLayout>

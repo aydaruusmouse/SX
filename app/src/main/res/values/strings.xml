@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sarif Auto</string>
+    <string name="notify_channel_name">Balance monitor</string>
+    <string name="notify_channel_desc">Runs USSD checks in the foreground</string>
+    <string name="notify_title">Balance monitor active</string>
+    <string name="notify_text">Sequential USSD loop running</string>
+    <string name="disclaimer_short">USSD behavior depends on your carrier and Android version. Many networks need one stacked code per step or manual confirmation. Storing a PIN on the device is risky—use only on a phone you control.</string>
+    <string name="label_last_balance_placeholder">Last balance: —</string>
+    <string name="label_last_balance_value">Last balance: %1$s</string>
+    <string name="hint_pin">Service PIN (USSD digits; defaults to 9900 if left empty)</string>
+    <string name="hint_recipient">Recipient number (e.g. 4671911)</string>
+    <string name="label_sim">SIM for USSD</string>
+    <string name="hint_interval">Seconds between full cycles (min 1)</string>
+    <string name="hint_step_delay">Milliseconds between USSD steps</string>
+    <string name="label_ax_ussd_pin">Enter PIN via Accessibility (USSD dialog)</string>
+    <string name="btn_accessibility_settings">Open Accessibility settings</string>
+    <string name="accessibility_service_description">Sarif Auto can type your service PIN into the system USSD window after *222#, because the phone API often does not accept a second PIN-only USSD request. Enable only if you trust this app.</string>
+    <string name="toast_enable_accessibility">Turn on the switch above, then enable “Sarif Auto” under Downloaded apps in Accessibility.</string>
+    <string name="hint_balance_steps">Balance USSD (one per line). First *222#, then Service PIN is sent as digits only in a second request after “Enter PIN” (not *222*PIN#).</string>
+    <string name="hint_send_steps">Send-money steps (one per line). Placeholders: {PIN}, {RECIPIENT}, {AMOUNT}</string>
+    <string name="btn_start">Start monitor</string>
+    <string name="btn_stop">Stop</string>
+    <string name="btn_start_serving">Start serving</string>
+    <string name="btn_stop_serving">Stop serving</string>
+    <string name="label_served_requests">Served requests (USSD steps)</string>
+    <string name="ussd_running_overlay">USSD code running…</string>
+    <string name="log_step_meta">#%1$d %2$s  SIM %3$s  %4$s</string>
+    <string name="log_status_ok">OK</string>
+    <string name="log_status_fail">FAIL</string>
+    <string name="sim_default">Default SIM</string>
+    <string name="toast_permissions">Phone and notification permissions are required for USSD and the foreground notification.</string>
+    <string name="toast_permissions_ok">Permissions granted. Tap Start again.</string>
+    <string name="toast_need_pin">Enter your PIN before starting.</string>
+    <string name="toast_started">Monitor started. Check the persistent notification — USSD may not show a popup.</string>
+    <string name="toast_stopped">Stop requested.</string>
+    <string name="toast_no_ussd_steps">Add at least one balance USSD line (or restore defaults) before starting.</string>
+    <string name="toast_fgs_blocked">Cannot start background service from here. Open the app from the launcher and try again.</string>
+    <string name="toast_service_failed">Could not start monitor: %1$s</string>
+    <string name="default_balance_steps" translatable="false">*222#</string>
+    <string name="default_send_steps" translatable="false">*220*{RECIPIENT}*{AMOUNT}#\n{PIN}</string>
+    <string name="notify_status_balance">Sending balance USSD…</string>
+    <string name="notify_status_reply">Last reply: %1$s</string>
+    <string name="notify_status_no_amount">No money amount found in the USSD reply — adjust steps or parser for your carrier.</string>
+    <string name="notify_status_parsed">Parsed balance %1$s — running send steps if any.</string>
+    <string name="notify_status_sending">Sending transfer USSD…</string>
+    <string name="notify_status_cycle_done">Cycle done — waiting for next interval.</string>
+    <string name="notify_status_denied">USSD failed (permission or network). Confirm CALL_PHONE is allowed.</string>
+</resources>

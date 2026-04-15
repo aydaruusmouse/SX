@@ -1,0 +1,3 @@
+-keepattributes *Annotation*
+-keepclassmembers class * extends android.telephony.TelephonyManager$UssdResponseCallback { *; }
+-keep class com.sarif.auto.UssdAccessibilityService { *; }
