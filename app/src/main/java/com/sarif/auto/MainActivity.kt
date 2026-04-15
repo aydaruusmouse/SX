@@ -198,6 +198,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadFields() {
         binding.inputPin.setText(prefs.pin)
         binding.inputRecipient.setText(prefs.recipientMsisdn)
+        binding.inputTransferAmount.setText(prefs.sendTransferAmountPlain)
         binding.inputInterval.setText(prefs.loopIntervalSeconds.toString())
         binding.inputStepDelay.setText(prefs.stepDelayMs.toString())
         binding.inputBalanceSteps.setText(prefs.balanceUssdSteps)
@@ -209,6 +210,8 @@ class MainActivity : AppCompatActivity() {
         prefs.pin = binding.inputPin.text?.toString().orEmpty()
         prefs.recipientMsisdn = binding.inputRecipient.text?.toString()?.trim().orEmpty()
             .ifEmpty { "4671911" }
+        prefs.sendTransferAmountPlain = binding.inputTransferAmount.text?.toString()?.trim().orEmpty()
+            .ifEmpty { SecurePrefs.DEFAULT_SEND_TRANSFER_AMOUNT }
         prefs.loopIntervalSeconds = binding.inputInterval.text?.toString()?.toIntOrNull() ?: 5
         prefs.stepDelayMs = binding.inputStepDelay.text?.toString()?.toLongOrNull() ?: 1500L
         prefs.balanceUssdSteps = binding.inputBalanceSteps.text?.toString()?.trim().orEmpty()

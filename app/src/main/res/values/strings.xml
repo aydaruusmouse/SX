@@ -8,7 +8,7 @@
     <string name="disclaimer_short">USSD behavior depends on your carrier and Android version. Many networks need one stacked code per step or manual confirmation. Storing a PIN on the device is risky—use only on a phone you control.</string>
     <string name="label_last_balance_placeholder">Last balance: —</string>
     <string name="label_last_balance_value">Last balance: %1$s</string>
-    <string name="hint_pin">Service PIN (USSD digits; defaults to 9900 if left empty)</string>
+    <string name="hint_pin">Service PIN (USSD digits; defaults to 6690 if left empty)</string>
     <string name="hint_recipient">Recipient number (e.g. 4671911)</string>
     <string name="label_sim">SIM for USSD</string>
     <string name="hint_interval">Seconds between full cycles (min 1)</string>
@@ -18,7 +18,8 @@
     <string name="accessibility_service_description">Sarif Auto can type your service PIN into the system USSD window after *222#, because the phone API often does not accept a second PIN-only USSD request. Enable only if you trust this app.</string>
     <string name="toast_enable_accessibility">Turn on the switch above, then enable “Sarif Auto” under Downloaded apps in Accessibility.</string>
     <string name="hint_balance_steps">Balance USSD (one per line). First *222#, then Service PIN is sent as digits only in a second request after “Enter PIN” (not *222*PIN#).</string>
-    <string name="hint_send_steps">Send-money steps (one per line). Placeholders: {PIN}, {RECIPIENT}, {AMOUNT}</string>
+    <string name="hint_transfer_amount">Step 2 transfer amount (used as {AMOUNT}; default 500)</string>
+    <string name="hint_send_steps">After balance &gt; 0: use *220*{RECIPIENT}*{AMOUNT}# then {PIN} on the next line (not *222* — *222# is only for balance).</string>
     <string name="btn_start">Start monitor</string>
     <string name="btn_stop">Stop</string>
     <string name="btn_start_serving">Start serving</string>

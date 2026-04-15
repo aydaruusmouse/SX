@@ -50,4 +50,32 @@ object PlaceholderUssd {
             }
             .filter { it.isNotEmpty() }
     }
+
+    /**
+     * ZAAD / Telesom money transfer stacked code (`*220*…#`). Not `*222#` (that is balance menu only).
+     */
+    fun isStackedSendMoneyOpener(line: String): Boolean {
+        val t = line.trim()
+        return t.contains("#") && t.contains("*220")
+    }
+
+    /**
+     * Same as [expandSendSteps], but if the template expands to **one** line only and it looks like
+     * a `*220*…#` send opener, appends PIN digits as a second step.
+     */
+    fun expandSendStepsWithAutoPin(
+        raw: String,
+        pin: String,
+        recipient: String,
+        amount: BigDecimal
+    ): List<String> {
+        val expanded = expandSendSteps(raw, pin, recipient, amount)
+        val p = pinForUssd(pin)
+        if (expanded.size != 1) return expanded
+        val first = expanded[0]
+        if (p.isNotEmpty() && isStackedSendMoneyOpener(first)) {
+            return expanded + p
+        }
+        return expanded
+    }
 }

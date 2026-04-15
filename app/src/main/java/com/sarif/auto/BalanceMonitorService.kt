@@ -218,21 +218,36 @@ class BalanceMonitorService : Service() {
                 return
             }
 
-            Log.d(TAG, "runCycle: parsed balance=$balance sendSteps next")
+            val transferAmount = prefs.sendTransferAmount()
+            Log.d(
+                TAG,
+                "runCycle: parsed balance=$balance step2 transferAmount=$transferAmount sendSteps next"
+            )
             postNotificationUpdate(getString(R.string.notify_status_parsed, balance.toPlainString()))
             broadcastParsedBalance(balance)
             delay(prefs.stepDelayMs)
 
-            val sendSteps = PlaceholderUssd.expandSendSteps(
+            val sendSteps = PlaceholderUssd.expandSendStepsWithAutoPin(
                 prefs.sendMoneySteps,
                 pin,
                 recipient,
-                balance
+                transferAmount
             )
             if (sendSteps.isNotEmpty()) {
                 postNotificationUpdate(getString(R.string.notify_status_sending))
+                val sendOpener = sendSteps.firstOrNull().orEmpty()
                 try {
-                    executor.sendChain(sendSteps, betweenStepsMs = prefs.stepDelayMs)
+                    SendMoneyUssdInteractive.runSendChain(
+                        this@BalanceMonitorService,
+                        executor,
+                        sendSteps,
+                        prefs.stepDelayMs,
+                        prefs,
+                        initialStepIndex = balanceResults.size,
+                        onEachStep = { step, r ->
+                            broadcastUssdStep(subId, sendOpener.ifBlank { opener }, step, r)
+                        }
+                    )
                 } catch (_: SecurityException) {
                     postNotificationUpdate(getString(R.string.notify_status_denied))
                     return

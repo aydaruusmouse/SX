@@ -29,6 +29,13 @@ object BalanceParser {
             parseNumber(m2.group(1))?.let { candidates.add(it) }
         }
 
+        // One decimal digit (e.g. 6,669.9) — common in USSD / locale formats
+        val p2b = Pattern.compile("""(?<![\d])([\d][\d,\s]*\.\d{1,4})(?!\d)""")
+        val m2b = p2b.matcher(normalized)
+        while (m2b.find()) {
+            parseNumber(m2b.group(1))?.let { candidates.add(it) }
+        }
+
         val p3 = Pattern.compile("""\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?)\b""")
         val m3 = p3.matcher(normalized)
         while (m3.find()) {
@@ -53,6 +60,22 @@ object BalanceParser {
         val m6 = p6.matcher(normalized)
         while (m6.find()) {
             parseNumber(m6.group(1))?.let { candidates.add(it) }
+        }
+
+        // Telesom ZAAD: "SLSH6,669.9" (currency glued to amount)
+        val pSlsh = Pattern.compile("""(?i)slsh([\d][\d,]*(?:\.\d+)?)""")
+        val mSlsh = pSlsh.matcher(normalized)
+        while (mSlsh.find()) {
+            parseNumber(mSlsh.group(1))?.let { candidates.add(it) }
+        }
+
+        // Somali balance phrasing: "Hadhaageedu waa SLSH6,669.9"
+        val pHad = Pattern.compile(
+            """(?i)(?:hadhaageedu|hadhaaga|haraaga)\s+.*?([\d][\d,]*(?:\.\d+)?)"""
+        )
+        val mHad = pHad.matcher(normalized)
+        while (mHad.find()) {
+            parseNumber(mHad.group(1))?.let { candidates.add(it) }
         }
 
         return candidates.filter { it > BigDecimal.ZERO }
