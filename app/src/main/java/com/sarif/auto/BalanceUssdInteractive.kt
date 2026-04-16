@@ -124,8 +124,10 @@ object BalanceUssdInteractive {
     ): UssdResult {
         val useAx = prefs.useAccessibilityUssdPin && UssdAccessibilityService.isEnabled(appCtx)
         if (useAx) {
+            UssdAccessibilityService.prepareArmedInjectSession()
             UssdPinBridge.abortSession()
             val deferred = UssdPinBridge.beginMenuSession("1")
+            UssdAccessibilityService.scheduleArmedInjectKicks()
             val captured = withTimeoutOrNull(25_000L) { deferred.await() }
             if (!captured.isNullOrBlank()) {
                 Log.d(TAG, "interactive: menu key 1 sent via Accessibility len=${captured.length}")
@@ -198,8 +200,10 @@ object BalanceUssdInteractive {
                 UssdAccessibilityService.isEnabled(appCtx)
             if (useAxForOpen) {
                 Log.i(TAG, "interactive: opener via system USSD popup + immediate AX PIN")
+                UssdAccessibilityService.prepareArmedInjectSession()
                 UssdPinBridge.abortSession()
                 val pinDeferred = UssdPinBridge.beginPinSession(pinDigits)
+                UssdAccessibilityService.scheduleArmedInjectKicks()
                 val launched = executor.launchSystemUssdPopup(singleOpener)
                 if (!launched) {
                     UssdPinBridge.abortSession()
@@ -237,7 +241,13 @@ object BalanceUssdInteractive {
                     appendAndNotify(sendMenuOne(appCtx, prefs, executor))
                     sentMenuOneAfterPin = true
                 }
-                delay(maxOf(delayMs, MIN_DELAY_BEFORE_PIN_MS))
+                // Long modem wait only before PIN; after AX PIN+menu, short pause is enough.
+                val postOpenPauseMs = if (useAxForOpen && singleOpener.contains("*222")) {
+                    delayMs.coerceIn(200L..600L)
+                } else {
+                    maxOf(delayMs, MIN_DELAY_BEFORE_PIN_MS)
+                }
+                delay(postOpenPauseMs)
             } else {
                 appendAndNotify(executor.sendOneStep(singleOpener))
                 delay(maxOf(delayMs, MIN_DELAY_BEFORE_PIN_MS))

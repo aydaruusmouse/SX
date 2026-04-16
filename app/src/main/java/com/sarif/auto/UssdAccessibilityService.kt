@@ -41,7 +41,18 @@ class UssdAccessibilityService : AccessibilityService() {
             }
             return
         }
+        tryInjectArmedInput(pin, menuKey, inputToInject)
+    }
 
+    /**
+     * Runs one inject attempt (same as [onAccessibilityEvent] when armed). Used on events and on
+     * timed kicks so menu “1” is not blocked waiting for the next slow OEM accessibility event.
+     */
+    private fun tryInjectArmedInput(
+        pin: String?,
+        menuKey: String?,
+        inputToInject: String
+    ) {
         if (injecting) return
         if (UssdPinBridge.sessionAgeMs() > SESSION_MAX_MS) {
             UssdPinBridge.abortSession()
@@ -49,9 +60,9 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Debounce hammering the wrong window (e.g. Transsion TextView “editable” toolbars)
         val now = SystemClock.elapsedRealtime()
-        if (consecutiveFillNoClick > 0 && now - lastFailureElapsed < 400L) return
+        val debounceMs = if (menuKey != null) 120L else 400L
+        if (consecutiveFillNoClick > 0 && now - lastFailureElapsed < debounceMs) return
 
         val roots = collectCandidateRoots()
         for (root in roots) {
@@ -63,6 +74,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 if (menuKey != null && !looksLikeUssdMenuPrompt(blob)) continue
 
                 injecting = true
+                val wasMenuOnly = menuKey != null
                 val filled = fillInput(root, inputToInject)
                 val clicked = if (filled) clickConfirm(root) else false
                 if (!filled || !clicked) {
@@ -80,6 +92,8 @@ class UssdAccessibilityService : AccessibilityService() {
 
                 consecutiveFillNoClick = 0
                 UssdPinBridge.clearArmedInput()
+                val delay1 = if (wasMenuOnly) CAPTURE_DELAY_MENU_MS else CAPTURE_DELAY_MS
+                val delay2 = if (wasMenuOnly) CAPTURE_SECOND_MENU_MS else CAPTURE_SECOND_PASS_MS
                 mainHandler.postDelayed({
                     val first = capturePhoneOrActiveWindowText()
                     mainHandler.postDelayed({
@@ -88,13 +102,18 @@ class UssdAccessibilityService : AccessibilityService() {
                         Log.d(TAG, "USSD AX: captured len=${merged.length} preview=${merged.take(200)}")
                         UssdPinBridge.finishWithCapturedText(merged.ifBlank { null })
                         injecting = false
-                    }, CAPTURE_SECOND_PASS_MS)
-                }, CAPTURE_DELAY_MS)
+                    }, delay2)
+                }, delay1)
                 return
             } finally {
                 root.recycle()
             }
         }
+    }
+
+    private fun resetInjectDebouncingForNewSession() {
+        consecutiveFillNoClick = 0
+        lastFailureElapsed = 0L
     }
 
     private fun tickReadCaptureSnapshot() {
@@ -399,6 +418,8 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun looksLikeUssdMenuPrompt(blob: String): Boolean {
         val b = blob.lowercase()
         if (looksLikeUssdPinPrompt(blob)) return false
+        // ZAAD service picker header (Somali)
+        if (b.contains("dooro") && b.contains("adeega")) return true
         if (Regex("""(?m)^\s*1[\).\-\:]""").containsMatchIn(blob)) return true
         if (Regex("""(?m)^\s*2[\).\-\:]""").containsMatchIn(blob)) return true
         if (Regex("""(?i)\b(press|choose|select|dooro|riix)\s*\d+\b""").containsMatchIn(blob)) return true
@@ -411,11 +432,36 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val TAG = "SarifAuto"
         private const val CAPTURE_DELAY_MS = 900L
         private const val CAPTURE_SECOND_PASS_MS = 650L
+        /** Faster follow-up read after menu digit + Send (PIN path keeps long delays). */
+        private const val CAPTURE_DELAY_MENU_MS = 320L
+        private const val CAPTURE_SECOND_MENU_MS = 220L
         private const val SESSION_MAX_MS = 60_000L
         private const val MAX_FAIL_STREAK = 6
 
         @Volatile
         private var instance: UssdAccessibilityService? = null
+
+        /** Clears inject debounce so PIN→menu transition is not delayed ~400ms+ waiting out streak. */
+        fun prepareArmedInjectSession() {
+            instance?.resetInjectDebouncingForNewSession()
+        }
+
+        /**
+         * Proactive inject passes — Transsion/OEMs often deliver sparse events; kicks avoid 5–10s waits
+         * before typing menu “1”.
+         */
+        fun scheduleArmedInjectKicks() {
+            val s = instance ?: return
+            val delays = longArrayOf(0L, 35L, 90L, 180L, 320L, 550L)
+            for (d in delays) {
+                s.mainHandler.postDelayed({
+                    val pin = UssdPinBridge.armedPin
+                    val menuKey = UssdPinBridge.armedMenuKey
+                    val input = pin ?: menuKey ?: return@postDelayed
+                    s.tryInjectArmedInput(pin, menuKey, input)
+                }, d)
+            }
+        }
 
         /**
          * Snapshot the phone USSD window a few times then finalize [UssdPinBridge.beginReadUssdTextCapture].
