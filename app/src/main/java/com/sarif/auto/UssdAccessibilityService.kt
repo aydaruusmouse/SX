@@ -61,7 +61,7 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         val now = SystemClock.elapsedRealtime()
-        val debounceMs = if (menuKey != null) 120L else 400L
+        val debounceMs = if (menuKey != null) 55L else 400L
         if (consecutiveFillNoClick > 0 && now - lastFailureElapsed < debounceMs) return
 
         val roots = collectCandidateRoots()
@@ -75,7 +75,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
                 injecting = true
                 val wasMenuOnly = menuKey != null
-                val filled = fillInput(root, inputToInject)
+                val filled = fillInput(root, inputToInject, preferPlainFieldForMenu = wasMenuOnly)
                 val clicked = if (filled) clickConfirm(root) else false
                 if (!filled || !clicked) {
                     Log.w(TAG, "USSD AX: pkg=$pkg fill=$filled click=$clicked (fail streak=$consecutiveFillNoClick)")
@@ -92,17 +92,33 @@ class UssdAccessibilityService : AccessibilityService() {
 
                 consecutiveFillNoClick = 0
                 UssdPinBridge.clearArmedInput()
-                val delay1 = if (wasMenuOnly) CAPTURE_DELAY_MENU_MS else CAPTURE_DELAY_MS
+                // Release before capture delays: PIN session can complete and [BalanceUssdInteractive]
+                // arms menu "1" immediately; kicks must not hit `if (injecting) return` during 420ms+ waits.
+                injecting = false
+                val delay1 = if (wasMenuOnly) CAPTURE_DELAY_MENU_MS else CAPTURE_DELAY_AFTER_PIN_MS
                 val delay2 = if (wasMenuOnly) CAPTURE_SECOND_MENU_MS else CAPTURE_SECOND_PASS_MS
                 mainHandler.postDelayed({
                     val first = capturePhoneOrActiveWindowText()
-                    mainHandler.postDelayed({
-                        val second = capturePhoneOrActiveWindowText()
-                        val merged = if (second.length > first.length) second else first
+                    fun finishWithMerged(merged: String) {
                         Log.d(TAG, "USSD AX: captured len=${merged.length} preview=${merged.take(200)}")
                         UssdPinBridge.finishWithCapturedText(merged.ifBlank { null })
-                        injecting = false
-                    }, delay2)
+                    }
+                    // After PIN, ZAAD often shows “Dooro Adeega” menu quickly — avoid full 900+650ms wait.
+                    val fastMenu = !wasMenuOnly && looksLikePostPinServiceMenu(first)
+                    if (fastMenu) {
+                        Log.d(TAG, "USSD AX: fast capture after PIN (service menu)")
+                        mainHandler.postDelayed({
+                            val second = capturePhoneOrActiveWindowText()
+                            val merged = if (second.length > first.length) second else first
+                            finishWithMerged(merged)
+                        }, CAPTURE_FAST_PIN_MENU_SECOND_MS)
+                    } else {
+                        mainHandler.postDelayed({
+                            val second = capturePhoneOrActiveWindowText()
+                            val merged = if (second.length > first.length) second else first
+                            finishWithMerged(merged)
+                        }, delay2)
+                    }
                 }, delay1)
                 return
             } finally {
@@ -238,7 +254,21 @@ class UssdAccessibilityService : AccessibilityService() {
         consecutiveFillNoClick = 0
     }
 
-    private fun fillInput(root: AccessibilityNodeInfo, input: String): Boolean {
+    private fun fillInput(
+        root: AccessibilityNodeInfo,
+        input: String,
+        preferPlainFieldForMenu: Boolean
+    ): Boolean {
+        // After PIN, focus can remain on the password box while the service menu is visible — send
+        // menu digits to a visible non-password EditText first when present.
+        if (preferPlainFieldForMenu && input.length <= 3 && input.all { it.isDigit() }) {
+            findPlainUssdEditText(root)?.use { target ->
+                if (setText(target, input)) {
+                    Log.d(TAG, "USSD AX: SET_TEXT on plain USSD EditText (menu key)")
+                    return true
+                }
+            }
+        }
         root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { focus ->
             try {
                 val cn = focus.className?.toString().orEmpty()
@@ -259,6 +289,23 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         }
         return false
+    }
+
+    /** USSD response / menu input line — not the PIN/password field. */
+    private fun findPlainUssdEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val cn = node.className?.toString().orEmpty()
+        if (node.isEditable && cn.contains("EditText", ignoreCase = true) && !node.isPassword) {
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (i in 0 until node.childCount) {
+            val c = node.getChild(i) ?: continue
+            try {
+                findPlainUssdEditText(c)?.let { return it }
+            } finally {
+                c.recycle()
+            }
+        }
+        return null
     }
 
     private inline fun <T> AccessibilityNodeInfo.use(block: (AccessibilityNodeInfo) -> T): T {
@@ -415,26 +462,38 @@ class UssdAccessibilityService : AccessibilityService() {
             (b.contains("enter") || b.contains("geli") || b.contains("fadlan") || b.contains("your pin"))
     }
 
+    /** Right after PIN submit, carrier shows service list (same lines as menu picker). */
+    private fun looksLikePostPinServiceMenu(blob: String): Boolean {
+        val b = blob.lowercase()
+        if (b.contains("dooro") && b.contains("adeega")) return true
+        if (b.contains("itus hadhaaga") && Regex("""(?m)^\s*1[\).\-\:]""").containsMatchIn(blob)) return true
+        return false
+    }
+
     private fun looksLikeUssdMenuPrompt(blob: String): Boolean {
         val b = blob.lowercase()
-        if (looksLikeUssdPinPrompt(blob)) return false
-        // ZAAD service picker header (Somali)
+        // Strong menu cues first: the same window dump often still contains PIN labels from the
+        // previous step: an early `looksLikeUssdPinPrompt` would wrongly block menu "1" injection.
         if (b.contains("dooro") && b.contains("adeega")) return true
         if (Regex("""(?m)^\s*1[\).\-\:]""").containsMatchIn(blob)) return true
         if (Regex("""(?m)^\s*2[\).\-\:]""").containsMatchIn(blob)) return true
         if (Regex("""(?i)\b(press|choose|select|dooro|riix)\s*\d+\b""").containsMatchIn(blob)) return true
         if (b.contains("itus hadhaaga")) return true
         if (b.contains("lacag dirid")) return true
+        if (looksLikeUssdPinPrompt(blob)) return false
         return false
     }
 
     companion object {
         private const val TAG = "SarifAuto"
-        private const val CAPTURE_DELAY_MS = 900L
         private const val CAPTURE_SECOND_PASS_MS = 650L
+        /** First read after PIN+Send — shorter than old 900ms so “Dooro Adeega” feels snappy. */
+        private const val CAPTURE_DELAY_AFTER_PIN_MS = 420L
+        /** Second read when first pass already looks like service menu (was ~650ms). */
+        private const val CAPTURE_FAST_PIN_MENU_SECOND_MS = 110L
         /** Faster follow-up read after menu digit + Send (PIN path keeps long delays). */
-        private const val CAPTURE_DELAY_MENU_MS = 320L
-        private const val CAPTURE_SECOND_MENU_MS = 220L
+        private const val CAPTURE_DELAY_MENU_MS = 200L
+        private const val CAPTURE_SECOND_MENU_MS = 140L
         private const val SESSION_MAX_MS = 60_000L
         private const val MAX_FAIL_STREAK = 6
 
@@ -452,14 +511,18 @@ class UssdAccessibilityService : AccessibilityService() {
          */
         fun scheduleArmedInjectKicks() {
             val s = instance ?: return
-            val delays = longArrayOf(0L, 35L, 90L, 180L, 320L, 550L)
-            for (d in delays) {
-                s.mainHandler.postDelayed({
-                    val pin = UssdPinBridge.armedPin
-                    val menuKey = UssdPinBridge.armedMenuKey
-                    val input = pin ?: menuKey ?: return@postDelayed
+            val runTry: () -> Unit = {
+                val pin = UssdPinBridge.armedPin
+                val menuKey = UssdPinBridge.armedMenuKey
+                val input = pin ?: menuKey
+                if (input != null) {
                     s.tryInjectArmedInput(pin, menuKey, input)
-                }, d)
+                }
+            }
+            s.mainHandler.post { runTry() }
+            val delays = longArrayOf(12L, 28L, 55L, 95L, 150L, 230L, 360L)
+            for (d in delays) {
+                s.mainHandler.postDelayed({ runTry() }, d)
             }
         }
 

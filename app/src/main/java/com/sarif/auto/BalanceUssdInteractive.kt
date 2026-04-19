@@ -18,6 +18,15 @@ object BalanceUssdInteractive {
     /** ZAAD/modem often needs time after the first USSD text before accepting the PIN dial. */
     private const val MIN_DELAY_BEFORE_PIN_MS = 3_000L
 
+    /** Carrier said the PIN attempt was wrong or malformed — do not auto-send menu "1" on top of it. */
+    private fun carrierRejectedPinMessage(text: String): Boolean {
+        val t = text.lowercase()
+        return t.contains("invalid pin") ||
+            t.contains("pin format") ||
+            t.contains("wrong pin") ||
+            t.contains("incorrect pin")
+    }
+
     fun shouldSubmitPin(lastResponse: String): Boolean {
         val t = lastResponse.trim()
         if (t.isEmpty()) return false
@@ -231,19 +240,29 @@ object BalanceUssdInteractive {
                     appendAndNotify(UssdResult.Message(openerText.orEmpty()))
                 } else {
                     appendAndNotify(UssdResult.Message(afterPinText))
-                    submittedPinThisRun = true
+                    if (!carrierRejectedPinMessage(afterPinText)) {
+                        submittedPinThisRun = true
+                    }
                 }
 
                 // Some devices/networks accept the PIN but do not provide immediate capture text.
                 // For *222 sessions, force-send menu key 1 right after the PIN attempt.
                 if (!sentMenuOneAfterPin && singleOpener.contains("*222")) {
-                    Log.d(TAG, "interactive: forced menu key 1 after opener PIN stage")
-                    appendAndNotify(sendMenuOne(appCtx, prefs, executor))
-                    sentMenuOneAfterPin = true
+                    val openReply = (results.lastOrNull() as? UssdResult.Message)?.text.orEmpty()
+                    if (carrierRejectedPinMessage(openReply)) {
+                        Log.w(
+                            TAG,
+                            "interactive: skip forced menu 1 — carrier PIN error; re-check PIN in app settings"
+                        )
+                    } else {
+                        Log.d(TAG, "interactive: forced menu key 1 after opener PIN stage")
+                        appendAndNotify(sendMenuOne(appCtx, prefs, executor))
+                        sentMenuOneAfterPin = true
+                    }
                 }
                 // Long modem wait only before PIN; after AX PIN+menu, short pause is enough.
                 val postOpenPauseMs = if (useAxForOpen && singleOpener.contains("*222")) {
-                    delayMs.coerceIn(200L..600L)
+                    delayMs.coerceIn(150L..400L)
                 } else {
                     maxOf(delayMs, MIN_DELAY_BEFORE_PIN_MS)
                 }
