@@ -40,11 +40,9 @@ class SecurePrefs(context: Context) {
 
     /**
      * One USSD per line after a positive balance is detected.
-     * Placeholders: {RECIPIENT}, {AMOUNT}, {PIN}
-     * [sendTransferAmountPlain] substitutes {AMOUNT} (fixed transfer, e.g. 500), not the parsed balance.
-     * Example:
-     * *220*{RECIPIENT}*{AMOUNT}#
-     * {PIN}
+     * Placeholders: {RECIPIENT}, {AMOUNT}, {PIN}, {BANK_PIN} (see [transferBankPinPlain]).
+     * [resolveTransferAmountForSend] picks `{AMOUNT}`: non-empty [sendTransferAmountPlain], else
+     * [balanceJustParsed] / [lastParsedBalancePlain]. No silent fallback to 500.
      */
     var sendMoneySteps: String
         get() = prefs.getString(
@@ -53,18 +51,34 @@ class SecurePrefs(context: Context) {
         ) ?: DEFAULT_SEND_STEPS
         set(v) = prefs.edit().putString(KEY_SEND_STEPS, v).apply()
 
-    /** Amount sent in step 2 for {AMOUNT} (e.g. 500 for *220*4671911*500#). */
+    /** Digits substituted for `{BANK_PIN}` in [sendMoneySteps] (bank / secondary PIN after amount). */
+    var transferBankPinPlain: String
+        get() = prefs.getString(KEY_TRANSFER_BANK_PIN, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_TRANSFER_BANK_PIN, v.trim()).apply()
+
+    /**
+     * Step-2 transfer amount for `{AMOUNT}`. **Leave empty** to use the balance value from the
+     * current cycle ([lastParsedBalancePlain] / parsed amount).
+     */
     var sendTransferAmountPlain: String
-        get() = prefs.getString(KEY_SEND_TRANSFER_AMOUNT, DEFAULT_SEND_TRANSFER_AMOUNT)
-            ?: DEFAULT_SEND_TRANSFER_AMOUNT
+        get() = prefs.getString(KEY_SEND_TRANSFER_AMOUNT, "") ?: ""
         set(v) = prefs.edit().putString(KEY_SEND_TRANSFER_AMOUNT, v.trim()).apply()
 
-    /** Positive amount for step 2 [sendMoneySteps] `{AMOUNT}`; falls back to [DEFAULT_SEND_TRANSFER_AMOUNT]. */
-    fun sendTransferAmount(): BigDecimal {
-        val bd = sendTransferAmountPlain.toBigDecimalOrNull()
-        if (bd != null && bd > BigDecimal.ZERO) return bd
-        return BigDecimal(DEFAULT_SEND_TRANSFER_AMOUNT)
-    }
+    /** Last positive balance from USSD (updated whenever the monitor parses a balance). */
+    var lastParsedBalancePlain: String
+        get() = prefs.getString(KEY_LAST_PARSED_BALANCE, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_LAST_PARSED_BALANCE, v.trim()).apply()
+
+    /**
+     * Shillings kept in the wallet when `{AMOUNT}` is taken from balance (empty transfer field).
+     * For **SLSH** with *222#-style balance, Telesom requires send amount **> 500**; **USD** has no
+     * that floor. Balance via *800# / *888# skips that minimum (any amount > 0 after reserve).
+     */
+    var transferReservePlain: String
+        get() = prefs.getString(KEY_TRANSFER_RESERVE, DEFAULT_TRANSFER_RESERVE) ?: DEFAULT_TRANSFER_RESERVE
+        set(v) = prefs.edit().putString(KEY_TRANSFER_RESERVE, v.trim()).apply()
+
+
 
     var loopIntervalSeconds: Int
         get() = prefs.getInt(KEY_INTERVAL, 5).coerceAtLeast(1)
@@ -73,6 +87,16 @@ class SecurePrefs(context: Context) {
     var stepDelayMs: Long
         get() = prefs.getLong(KEY_STEP_DELAY, DEFAULT_STEP_DELAY_MS).coerceAtLeast(200L)
         set(v) = prefs.edit().putLong(KEY_STEP_DELAY, v.coerceAtLeast(200L)).apply()
+
+    /**
+     * When [useAccessibilityUssdPin] is on, minimum pause after a full balance USSD run before the
+     * next *222# (modem often errors if the gap is too short).
+     */
+    var axUssdMinCycleGapMs: Long
+        get() = prefs.getLong(KEY_AX_USSD_MIN_GAP, DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS)
+            .coerceAtLeast(MIN_AX_USSD_CYCLE_GAP_MS)
+        set(v) = prefs.edit().putLong(KEY_AX_USSD_MIN_GAP, v.coerceAtLeast(MIN_AX_USSD_CYCLE_GAP_MS))
+            .apply()
 
     var subscriptionId: Int
         get() = prefs.getInt(KEY_SUB_ID, -1)
@@ -91,21 +115,44 @@ class SecurePrefs(context: Context) {
         const val DEFAULT_SERVICE_PIN = "6690"
 
         const val DEFAULT_BALANCE_STEPS = "*222#"
-        const val DEFAULT_SEND_STEPS = "*220*{RECIPIENT}*{AMOUNT}#\n{PIN}"
+        const val DEFAULT_SEND_STEPS =
+            "*800#\n" +
+                "{PIN}\n" +
+                "5\n" +
+                "2\n" +
+                "4\n" +
+                "1\n" +
+                "{AMOUNT}\n" +
+                "1\n" +
+                "{BANK_PIN}\n" +
+                "1"
 
         /** Default step-2 transfer amount for {AMOUNT}. */
         const val DEFAULT_SEND_TRANSFER_AMOUNT = "500"
 
+        /** Default reserve when using balance as {AMOUNT} (not full sweep). */
+        const val DEFAULT_TRANSFER_RESERVE = "100"
+
         /** Extra time after first USSD before sending PIN (some networks are slow). */
         private const val DEFAULT_STEP_DELAY_MS = 1500L
+
+        /** Default min gap between full balance USSD cycles when Accessibility PIN is used (ms). */
+        const val DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS = 4500L
+
+        /** Floor for [axUssdMinCycleGapMs] (below this, *222# often fails on the next cycle). */
+        private const val MIN_AX_USSD_CYCLE_GAP_MS = 500L
 
         private const val KEY_PIN = "pin"
         private const val KEY_RECIPIENT = "recipient"
         private const val KEY_BALANCE_STEPS = "balance_steps"
         private const val KEY_SEND_STEPS = "send_steps"
+        private const val KEY_TRANSFER_BANK_PIN = "transfer_bank_pin"
         private const val KEY_SEND_TRANSFER_AMOUNT = "send_transfer_amount"
+        private const val KEY_LAST_PARSED_BALANCE = "last_parsed_balance"
+        private const val KEY_TRANSFER_RESERVE = "transfer_reserve"
         private const val KEY_INTERVAL = "interval_sec"
         private const val KEY_STEP_DELAY = "step_delay_ms"
+        private const val KEY_AX_USSD_MIN_GAP = "ax_ussd_min_cycle_gap_ms"
         private const val KEY_SUB_ID = "subscription_id"
         private const val KEY_USE_AX_USSD_PIN = "use_ax_ussd_pin"
     }

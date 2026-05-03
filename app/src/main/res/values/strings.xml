@@ -13,13 +13,16 @@
     <string name="label_sim">SIM for USSD</string>
     <string name="hint_interval">Seconds between full cycles (min 1)</string>
     <string name="hint_step_delay">Milliseconds between USSD steps</string>
+    <string name="hint_ax_ussd_min_gap">Min ms between balance cycles if Accessibility PIN is on (default 4500; floor 500)</string>
     <string name="label_ax_ussd_pin">Enter PIN via Accessibility (USSD dialog)</string>
     <string name="btn_accessibility_settings">Open Accessibility settings</string>
     <string name="accessibility_service_description">Sarif Auto can type your service PIN into the system USSD window after *222#, because the phone API often does not accept a second PIN-only USSD request. Enable only if you trust this app.</string>
     <string name="toast_enable_accessibility">Turn on the switch above, then enable “Sarif Auto” under Downloaded apps in Accessibility.</string>
     <string name="hint_balance_steps">Balance USSD (one per line). First *222#, then Service PIN is sent as digits only in a second request after “Enter PIN” (not *222*PIN#).</string>
-    <string name="hint_transfer_amount">Step 2 transfer amount (used as {AMOUNT}; default 500)</string>
-    <string name="hint_send_steps">After balance &gt; 0: use *220*{RECIPIENT}*{AMOUNT}# then {PIN} on the next line (not *222* — *222# is only for balance).</string>
+    <string name="hint_transfer_amount">Transfer amount {AMOUNT} — leave empty to use balance minus reserve</string>
+    <string name="hint_transfer_reserve">Keep in wallet when using balance (not full sweep; default 100)</string>
+    <string name="hint_transfer_bank_pin">Bank / second PIN for `{BANK_PIN}` in send steps (digits only)</string>
+    <string name="hint_send_steps">{AMOUNT} is whole units only (1.4 → 1, 5.9 → 5). Then 1 on maclumadka, {BANK_PIN}, 1. *220*…# still works.</string>
     <string name="btn_start">Start monitor</string>
     <string name="btn_stop">Stop</string>
     <string name="btn_start_serving">Start serving</string>
@@ -39,7 +42,7 @@
     <string name="toast_fgs_blocked">Cannot start background service from here. Open the app from the launcher and try again.</string>
     <string name="toast_service_failed">Could not start monitor: %1$s</string>
     <string name="default_balance_steps" translatable="false">*222#</string>
-    <string name="default_send_steps" translatable="false">*220*{RECIPIENT}*{AMOUNT}#\n{PIN}</string>
+    <string name="default_send_steps" translatable="false">*800#\n{PIN}\n5\n2\n4\n1\n{AMOUNT}\n1\n{BANK_PIN}\n1</string>
     <string name="notify_status_balance">Sending balance USSD…</string>
     <string name="notify_status_reply">Last reply: %1$s</string>
     <string name="notify_status_no_amount">No money amount found in the USSD reply — adjust steps or parser for your carrier.</string>
@@ -47,4 +50,5 @@
     <string name="notify_status_sending">Sending transfer USSD…</string>
     <string name="notify_status_cycle_done">Cycle done — waiting for next interval.</string>
     <string name="notify_status_denied">USSD failed (permission or network). Confirm CALL_PHONE is allowed.</string>
+    <string name="toast_rate_limit_backoff">Carrier rate limit detected. Pausing for 15s to avoid blocks.</string>
 </resources>

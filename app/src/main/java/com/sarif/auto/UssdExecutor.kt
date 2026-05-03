@@ -133,13 +133,14 @@ class UssdExecutor(
 
                             override fun onReceiveUssdResponseFailed(
                                 telephonyManager: TelephonyManager,
-                                request: String,
+                                request: String?,
                                 failureCode: Int
                             ) {
                                 if (cont.isActive) {
                                     Log.w(
                                         TAG,
-                                        "USSD failed failureCode=$failureCode (${ussdFailureHint(failureCode)})"
+                                        "USSD failed failureCode=$failureCode " +
+                                            "requestLen=${request?.length ?: 0} (${ussdFailureHint(failureCode)})"
                                     )
                                     cont.resume(UssdResult.Failure(failureCode, null))
                                 }

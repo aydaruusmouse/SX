@@ -19,7 +19,29 @@ object UssdPinBridge {
     @Volatile
     private var armedAtElapsed: Long = 0L
 
+    /** When true, [UssdAccessibilityService] uses shorter post-inject read delays (send-money chain). */
+    @Volatile
+    private var fastTransferPostInjectCapture: Boolean = false
+
+    /**
+     * During send-money, balance-derived `{AMOUNT}` (whole units). When the USSD screen is
+     * “Fadlan Geli lacagta”, inject this instead of a stray template menu digit (e.g. `4`).
+     */
+    @Volatile
+    var sendChainPreferredAmountDigits: String? = null
+        private set
+
+    fun setSendChainPreferredAmountDigits(digits: String?) {
+        sendChainPreferredAmountDigits = digits?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     private var pending: CompletableDeferred<String?>? = null
+
+    fun setFastTransferCapture(fast: Boolean) {
+        fastTransferPostInjectCapture = fast
+    }
+
+    fun isFastTransferCapture(): Boolean = fastTransferPostInjectCapture
 
     /** Read-only: merge on-screen USSD text after Telephony follow-up (e.g. menu key `1`). */
     private var readCapturePending: CompletableDeferred<String?>? = null
@@ -71,6 +93,11 @@ object UssdPinBridge {
         clearArmedInputLocked()
         pending?.complete(null)
         pending = null
+    }
+
+    /** Clears send-money-only context (call when the monitor cycle ends). */
+    fun clearSendMoneySessionHints() {
+        sendChainPreferredAmountDigits = null
     }
 
     /**

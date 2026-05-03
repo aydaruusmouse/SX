@@ -42,7 +42,10 @@ class BalanceMonitorService : Service() {
         }
 
         isServiceRunning = true
-        Log.i(TAG, "onStartCommand: foreground + loop (subId=${prefs.subscriptionId}, interval=${prefs.loopIntervalSeconds}s)")
+        Log.i(
+            TAG,
+            "onStartCommand: foreground + loop (subId=${prefs.subscriptionId}, interval=${prefs.loopIntervalSeconds}s, axMinGapMs=${prefs.axUssdMinCycleGapMs})"
+        )
         startAsForeground(getString(R.string.notify_text))
         startLoop(prefs)
         return START_STICKY
@@ -82,21 +85,15 @@ class BalanceMonitorService : Service() {
     }
 
     private fun broadcastParsedBalance(amount: BigDecimal) {
-        sendBroadcast(
-            Intent(BalanceUiContract.ACTION_BALANCE_UPDATE).apply {
-                setPackage(packageName)
-                putExtra(BalanceUiContract.EXTRA_BALANCE_PLAIN, amount.toPlainString())
-            }
-        )
+        scope.launch {
+            com.sarif.auto.domain.UssdStateObserver.emitBalance(amount.toPlainString())
+        }
     }
 
     private fun broadcastUssdBusy(busy: Boolean) {
-        sendBroadcast(
-            Intent(BalanceUiContract.ACTION_USSD_BUSY).apply {
-                setPackage(packageName)
-                putExtra(BalanceUiContract.EXTRA_BUSY, busy)
-            }
-        )
+        scope.launch {
+            com.sarif.auto.domain.UssdStateObserver.emitBusy(busy)
+        }
     }
 
     private fun broadcastUssdStep(subId: Int, opener: String, stepIndex: Int, r: UssdResult) {
@@ -105,19 +102,17 @@ class BalanceMonitorService : Service() {
             is UssdResult.Message -> r.text
             is UssdResult.Failure -> "${r.code}:${r.message}"
         }
-        sendBroadcast(
-            Intent(BalanceUiContract.ACTION_USSD_STEP).apply {
-                setPackage(packageName)
-                putExtra(BalanceUiContract.EXTRA_STEP_INDEX, stepIndex)
-                putExtra(BalanceUiContract.EXTRA_RESULT_IS_FAILURE, fail)
-                putExtra(BalanceUiContract.EXTRA_STEP_BODY, body)
-                putExtra(BalanceUiContract.EXTRA_REQUEST_OPENER, opener)
-                putExtra(
-                    BalanceUiContract.EXTRA_SIM_LABEL,
-                    if (subId < 0) "def" else subId.toString()
+        scope.launch {
+            com.sarif.auto.domain.UssdStateObserver.emitStep(
+                com.sarif.auto.domain.UssdStepEvent(
+                    stepIndex = stepIndex,
+                    isFailure = fail,
+                    body = body,
+                    requestOpener = opener,
+                    simLabel = if (subId < 0) "def" else subId.toString()
                 )
-            }
-        )
+            )
+        }
     }
 
     private fun openerLine(prefs: SecurePrefs): String {
@@ -153,9 +148,26 @@ class BalanceMonitorService : Service() {
         loopJob?.cancel()
         loopJob = scope.launch(Dispatchers.Default) {
             val subId = prefs.subscriptionId
+            val appCtx = applicationContext
             while (isActive) {
                 runCycle(prefs, subId)
-                delay(prefs.loopIntervalSeconds * 1000L)
+                val intervalMs = prefs.loopIntervalSeconds * 1000L
+                // System *222# + Accessibility PIN: a new MMI too soon often returns
+                // "Connection problem or invalid MMI code" / USSD timeout on the next cycle.
+                val waitMs = if (prefs.useAccessibilityUssdPin &&
+                    UssdAccessibilityService.isEnabled(appCtx)
+                ) {
+                    maxOf(intervalMs, prefs.axUssdMinCycleGapMs)
+                } else {
+                    intervalMs
+                }
+                if (waitMs > intervalMs) {
+                    Log.d(
+                        TAG,
+                        "loop: wait ${waitMs}ms before next balance (interval was ${intervalMs}ms, AX USSD cooldown)"
+                    )
+                }
+                delay(waitMs)
             }
         }
     }
@@ -210,32 +222,94 @@ class BalanceMonitorService : Service() {
                 getString(R.string.notify_status_reply, snippet.ifEmpty { "—" })
             )
 
-            val balance = BalanceParser.parseLargestPositiveAmount(combined)
-            if (balance == null || balance <= BigDecimal.ZERO) {
-                Log.d(TAG, "runCycle: no positive balance parsed (snippet len=${snippet.length})")
+            // --- Phase 1: parse balance (no transfer yet) ---
+            val parsedBalance = BalanceParser.parseLargestPositiveAmount(combined)
+            if (parsedBalance == null || parsedBalance <= BigDecimal.ZERO) {
+                if (BalanceParser.looksLikeUssdFailureWithoutBalanceLine(combined)) {
+                    Log.w(TAG, "runCycle: carrier failure detected, adding 15s penalty delay to backoff rate limits")
+                    scope.launch { com.sarif.auto.domain.UssdStateObserver.emitBackoff(true) }
+                    delay(15_000L)
+                    scope.launch { com.sarif.auto.domain.UssdStateObserver.emitBackoff(false) }
+                }
+                Log.d(TAG, "runCycle: balance not > 0 — skip transfer, next loop checks balance again")
                 postNotificationUpdate(getString(R.string.notify_status_no_amount))
                 delay(prefs.stepDelayMs)
                 return
             }
 
-            val transferAmount = prefs.sendTransferAmount()
+            prefs.lastParsedBalancePlain = parsedBalance.toPlainString()
+            broadcastParsedBalance(parsedBalance)
+            postNotificationUpdate(getString(R.string.notify_status_parsed, parsedBalance.toPlainString()))
+
+            // --- Phase 2: compute transfer amount once for this cycle (stored locally until send) ---
+            val firstBalanceLine = openerSteps.firstOrNull().orEmpty()
+            val skipTelesomSlshMinimum = firstBalanceLine.contains("*800") ||
+                firstBalanceLine.contains("*888")
+            val pendingTransferAmount = com.sarif.auto.domain.TransferCalculatorUseCase.resolveTransferAmountForSend(
+                configuredSendAmount = prefs.sendTransferAmountPlain,
+                balanceJustParsed = parsedBalance,
+                lastParsedBalance = prefs.lastParsedBalancePlain,
+                transferReserve = prefs.transferReservePlain,
+                ussdContext = combined,
+                skipTelesomSlshMinimum = skipTelesomSlshMinimum
+            )
+            if (pendingTransferAmount <= BigDecimal.ZERO) {
+                Log.w(
+                    TAG,
+                    "runCycle: transfer amount is 0 — skip transfer, next loop checks balance again (balance=$parsedBalance)"
+                )
+                delay(prefs.stepDelayMs)
+                return
+            }
+
             Log.d(
                 TAG,
-                "runCycle: parsed balance=$balance step2 transferAmount=$transferAmount sendSteps next"
+                "runCycle: balance=$parsedBalance pendingTransferAmount=$pendingTransferAmount → transfer phase"
             )
-            postNotificationUpdate(getString(R.string.notify_status_parsed, balance.toPlainString()))
-            broadcastParsedBalance(balance)
-            delay(prefs.stepDelayMs)
+            // Pause using only [SecurePrefs.stepDelayMs]. If *220* is often ignored right after
+            // balance USSD, increase step delay in settings (a fixed extra seconds was confusing
+            // and could block the transfer phase on some devices).
+            UssdPinBridge.abortSession()
+            UssdPinBridge.abortReadUssdTextCapture()
+            val preTransferDelay = if (skipTelesomSlshMinimum) {
+                kotlin.math.max(180L, kotlin.math.min(prefs.stepDelayMs, 420L))
+            } else {
+                prefs.stepDelayMs
+            }
+            delay(preTransferDelay)
 
+            // --- Phase 3: send money using only pendingTransferAmount from phase 2 ---
             val sendSteps = PlaceholderUssd.expandSendStepsWithAutoPin(
                 prefs.sendMoneySteps,
                 pin,
                 recipient,
-                transferAmount
+                pendingTransferAmount,
+                prefs.transferBankPinPlain
+            )
+            UssdPinBridge.setSendChainPreferredAmountDigits(
+                PlaceholderUssd.formatSendAmountPlaceholder(pendingTransferAmount)
             )
             if (sendSteps.isNotEmpty()) {
+                val firstSendForDismiss = sendSteps.firstOrNull()?.trim().orEmpty()
+                if (firstSendForDismiss.isNotEmpty() &&
+                    (
+                        PlaceholderUssd.isAxPopupPinSendOpener(firstSendForDismiss) ||
+                            skipTelesomSlshMinimum
+                        )
+                ) {
+                    Log.d(TAG, "runCycle: dismiss lingering USSD overlay before transfer")
+                    UssdAccessibilityService.dismissUssdBeforeNewSession()
+                    // Let BACK close the balance dialog and avoid racing MainActivity relayout / system UI
+                    // before *800#; 650ms was often too tight on Samsung.
+                    delay(1100L)
+                }
                 postNotificationUpdate(getString(R.string.notify_status_sending))
                 val sendOpener = sendSteps.firstOrNull().orEmpty()
+                val firstSendTrimmed = sendSteps.firstOrNull()?.trim().orEmpty()
+                val assumeAxMenuFollowUps = skipTelesomSlshMinimum &&
+                    firstSendTrimmed.isNotEmpty() &&
+                    !PlaceholderUssd.isAxPopupPinSendOpener(firstSendTrimmed) &&
+                    SendMoneyUssdInteractive.isBareInSessionSendStep(firstSendTrimmed)
                 try {
                     SendMoneyUssdInteractive.runSendChain(
                         this@BalanceMonitorService,
@@ -246,7 +320,8 @@ class BalanceMonitorService : Service() {
                         initialStepIndex = balanceResults.size,
                         onEachStep = { step, r ->
                             broadcastUssdStep(subId, sendOpener.ifBlank { opener }, step, r)
-                        }
+                        },
+                        assumeAccessibilityMenuFollowUps = assumeAxMenuFollowUps
                     )
                 } catch (_: SecurityException) {
                     postNotificationUpdate(getString(R.string.notify_status_denied))
@@ -257,6 +332,9 @@ class BalanceMonitorService : Service() {
             postNotificationUpdate(getString(R.string.notify_status_cycle_done))
             delay(prefs.stepDelayMs)
         } finally {
+            UssdPinBridge.abortSession()
+            UssdPinBridge.clearSendMoneySessionHints()
+            UssdPinBridge.abortReadUssdTextCapture()
             broadcastUssdBusy(false)
         }
     }

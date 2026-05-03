@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.provider.Settings
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
@@ -17,47 +18,66 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.sarif.auto.databinding.ActivityMainBinding
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
+
+    private companion object {
+        private const val TAG = "SarifAuto"
+    }
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: SecurePrefs
     private lateinit var logStore: UssdLogStore
     private val servedAdapter = ServedRequestsAdapter()
 
-    private val balanceReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != BalanceUiContract.ACTION_BALANCE_UPDATE) return
-            val v = intent.getStringExtra(BalanceUiContract.EXTRA_BALANCE_PLAIN) ?: return
-            binding.textLastBalance.text = getString(R.string.label_last_balance_value, v)
-        }
-    }
-
-    private val ussdUiReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                BalanceUiContract.ACTION_USSD_BUSY -> {
-                    refreshServingUi()
+    private fun observeUssdState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    com.sarif.auto.domain.UssdStateObserver.balanceUpdates.collect { v ->
+                        binding.textLastBalance.text = getString(R.string.label_last_balance_value, v)
+                    }
                 }
-                BalanceUiContract.ACTION_USSD_STEP -> {
-                    val step = intent.getIntExtra(BalanceUiContract.EXTRA_STEP_INDEX, 0)
-                    val fail = intent.getBooleanExtra(BalanceUiContract.EXTRA_RESULT_IS_FAILURE, false)
-                    val body = intent.getStringExtra(BalanceUiContract.EXTRA_STEP_BODY).orEmpty().take(2000)
-                    val opener = intent.getStringExtra(BalanceUiContract.EXTRA_REQUEST_OPENER).orEmpty()
-                    val sim = intent.getStringExtra(BalanceUiContract.EXTRA_SIM_LABEL).orEmpty()
-                    logStore.append(
-                        UssdLogEntry(
-                            id = System.nanoTime(),
-                            stepIndex = step,
-                            timeMs = System.currentTimeMillis(),
-                            requestOpener = opener.ifBlank { "*" },
-                            simLabel = sim,
-                            ok = !fail,
-                            response = body
+                launch {
+                    com.sarif.auto.domain.UssdStateObserver.ussdBusy.collect {
+                        refreshServingUi()
+                    }
+                }
+                launch {
+                    com.sarif.auto.domain.UssdStateObserver.backoffActive.collect { active ->
+                        if (active) {
+                            if (BalanceMonitorService.isServiceRunning) {
+                                Log.d(TAG, "rate limit backoff (no toast — avoid stealing focus from USSD)")
+                            } else {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    R.string.toast_rate_limit_backoff,
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }
+                launch {
+                    com.sarif.auto.domain.UssdStateObserver.ussdSteps.collect { event ->
+                        logStore.append(
+                            UssdLogEntry(
+                                id = System.nanoTime(),
+                                stepIndex = event.stepIndex,
+                                timeMs = System.currentTimeMillis(),
+                                requestOpener = event.requestOpener.ifBlank { "*" },
+                                simLabel = event.simLabel,
+                                ok = !event.isFailure,
+                                response = event.body.take(2000)
+                            )
                         )
-                    )
-                    refreshServedList()
+                        refreshServedList()
+                    }
                 }
             }
         }
@@ -164,34 +184,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        ContextCompat.registerReceiver(
-            this,
-            balanceReceiver,
-            IntentFilter(BalanceUiContract.ACTION_BALANCE_UPDATE),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        val ussdFilter = IntentFilter().apply {
-            addAction(BalanceUiContract.ACTION_USSD_BUSY)
-            addAction(BalanceUiContract.ACTION_USSD_STEP)
-        }
-        ContextCompat.registerReceiver(
-            this,
-            ussdUiReceiver,
-            ussdFilter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        observeUssdState()
         refreshServingUi()
     }
 
     override fun onStop() {
-        try {
-            unregisterReceiver(balanceReceiver)
-        } catch (_: IllegalArgumentException) {
-        }
-        try {
-            unregisterReceiver(ussdUiReceiver)
-        } catch (_: IllegalArgumentException) {
-        }
         super.onStop()
     }
 
@@ -199,8 +196,15 @@ class MainActivity : AppCompatActivity() {
         binding.inputPin.setText(prefs.pin)
         binding.inputRecipient.setText(prefs.recipientMsisdn)
         binding.inputTransferAmount.setText(prefs.sendTransferAmountPlain)
+        binding.inputTransferReserve.setText(prefs.transferReservePlain)
+        binding.inputTransferBankPin.setText(prefs.transferBankPinPlain)
+        val lastBal = prefs.lastParsedBalancePlain
+        if (lastBal.isNotBlank()) {
+            binding.textLastBalance.text = getString(R.string.label_last_balance_value, lastBal)
+        }
         binding.inputInterval.setText(prefs.loopIntervalSeconds.toString())
         binding.inputStepDelay.setText(prefs.stepDelayMs.toString())
+        binding.inputAxUssdMinGap.setText(prefs.axUssdMinCycleGapMs.toString())
         binding.inputBalanceSteps.setText(prefs.balanceUssdSteps)
         binding.inputSendSteps.setText(prefs.sendMoneySteps)
         binding.switchAxUssdPin.isChecked = prefs.useAccessibilityUssdPin
@@ -211,9 +215,13 @@ class MainActivity : AppCompatActivity() {
         prefs.recipientMsisdn = binding.inputRecipient.text?.toString()?.trim().orEmpty()
             .ifEmpty { "4671911" }
         prefs.sendTransferAmountPlain = binding.inputTransferAmount.text?.toString()?.trim().orEmpty()
-            .ifEmpty { SecurePrefs.DEFAULT_SEND_TRANSFER_AMOUNT }
+        prefs.transferReservePlain = binding.inputTransferReserve.text?.toString()?.trim().orEmpty()
+            .ifEmpty { SecurePrefs.DEFAULT_TRANSFER_RESERVE }
+        prefs.transferBankPinPlain = binding.inputTransferBankPin.text?.toString()?.trim().orEmpty()
         prefs.loopIntervalSeconds = binding.inputInterval.text?.toString()?.toIntOrNull() ?: 5
         prefs.stepDelayMs = binding.inputStepDelay.text?.toString()?.toLongOrNull() ?: 1500L
+        prefs.axUssdMinCycleGapMs = binding.inputAxUssdMinGap.text?.toString()?.toLongOrNull()
+            ?: SecurePrefs.DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS
         prefs.balanceUssdSteps = binding.inputBalanceSteps.text?.toString()?.trim().orEmpty()
             .ifEmpty { SecurePrefs.DEFAULT_BALANCE_STEPS }
         prefs.sendMoneySteps = binding.inputSendSteps.text?.toString()?.trim().orEmpty()
