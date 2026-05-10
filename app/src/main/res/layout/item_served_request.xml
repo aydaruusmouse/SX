@@ -4,8 +4,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    app:cardElevation="1dp">
+    android:layout_marginBottom="10dp"
+    app:cardBackgroundColor="@color/sarif_surface"
+    app:cardElevation="3dp"
+    app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
+    app:strokeWidth="0dp">
 
     <LinearLayout
         android:layout_width="match_parent"

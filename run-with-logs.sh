@@ -23,8 +23,8 @@ fi
 echo ">>> Installing…"
 ./gradlew installDebug
 
-echo ">>> Launching MainActivity…"
-adb shell am start -n com.sarif.auto/.MainActivity
+echo ">>> Launching app (SplashActivity)…"
+adb shell am start -n com.sarif.auto/.SplashActivity
 
 sleep 1
 PID="$(adb shell pidof com.sarif.auto 2>/dev/null | tr -d '\r' || true)"

@@ -1,8 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.SarifAuto" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/md_theme_primary</item>
-        <item name="colorPrimaryContainer">@color/md_theme_primary_container</item>
-        <item name="android:statusBarColor">@color/md_theme_primary</item>
+        <item name="colorPrimary">@color/sarif_primary</item>
+        <item name="colorOnPrimary">@color/sarif_on_primary</item>
+        <item name="colorPrimaryContainer">@color/sarif_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/sarif_on_primary_container</item>
+        <item name="colorSecondary">@color/sarif_accent</item>
+        <item name="colorOnSecondary">@color/sarif_on_primary</item>
+        <item name="android:statusBarColor">@color/sarif_background</item>
+        <item name="android:navigationBarColor">@color/sarif_background</item>
+        <item name="android:windowBackground">@color/sarif_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="colorSurface">@color/sarif_surface</item>
+        <item name="colorOnSurface">@color/sarif_on_surface</item>
+        <item name="colorSurfaceContainer">@color/sarif_surface</item>
+        <item name="colorSurfaceContainerLow">@color/sarif_surface</item>
+        <item name="colorOutlineVariant">@color/sarif_outline_soft</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.Sarif.Card.Medium" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.Sarif.ChipCard" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
+    </style>
+
+    <style name="Widget.Sarif.Progress.Metric" parent="Widget.AppCompat.ProgressBar.Horizontal">
+        <item name="android:progressDrawable">@drawable/progress_metric_blue</item>
+        <item name="android:minHeight">6dp</item>
+        <item name="android:maxHeight">6dp</item>
+    </style>
+
+    <style name="Widget.Sarif.Progress.MetricAccent" parent="Widget.AppCompat.ProgressBar.Horizontal">
+        <item name="android:progressDrawable">@drawable/progress_metric_accent</item>
+        <item name="android:minHeight">6dp</item>
+        <item name="android:maxHeight">6dp</item>
     </style>
 </resources>

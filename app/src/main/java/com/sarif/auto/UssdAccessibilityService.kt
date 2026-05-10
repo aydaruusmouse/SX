@@ -928,7 +928,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
         /**
          * Closes a lingering USSD overlay (e.g. balance "OK") before dialing a new `*800#` transfer.
-         * Skips when our activity has focus — [GLOBAL_ACTION_BACK] would finish [MainActivity] instead.
+         * Skips when our activity has focus — [GLOBAL_ACTION_BACK] would finish the foreground activity.
          */
         fun dismissUssdBeforeNewSession() {
             val s = instance ?: return

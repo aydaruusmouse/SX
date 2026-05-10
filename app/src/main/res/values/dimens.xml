@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Side inset so cards don’t sit flush to screen edges -->
+    <!-- Applied on activity fragment hosts so width is always inset (fixes full-bleed cards). -->
+    <!-- Inset on fragment hosts: grey background visible left/right (and login/license). -->
+    <dimen name="sarif_horizontal_inset">24dp</dimen>
+    <dimen name="sarif_card_grid_gutter">8dp</dimen>
+    <!-- Home scroll: grey background peeks past first/last white blocks -->
+    <dimen name="sarif_home_scroll_padding_top">12dp</dimen>
+    <dimen name="sarif_home_scroll_padding_bottom">28dp</dimen>
+</resources>

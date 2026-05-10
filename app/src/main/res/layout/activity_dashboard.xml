@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/sarif_background"
+    android:orientation="vertical"
+    tools:context=".DashboardActivity">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/sarif_surface"
+        android:elevation="0dp"
+        app:title="@string/dashboard_title"
+        app:titleTextAppearance="?attr/textAppearanceTitleLarge"
+        app:titleTextColor="@color/sarif_on_surface" />
+
+    <FrameLayout
+        android:id="@+id/fragmentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/sarif_background"
+        android:clipToPadding="true"
+        android:paddingStart="@dimen/sarif_horizontal_inset"
+        android:paddingEnd="@dimen/sarif_horizontal_inset" />
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/sarif_surface"
+        android:elevation="10dp"
+        app:itemIconTint="@color/bottom_nav_color"
+        app:itemRippleColor="@color/sarif_primary_container"
+        app:itemTextColor="@color/bottom_nav_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav_menu" />
+</LinearLayout>

@@ -1,7 +1,6 @@
 package com.sarif.auto
 
 import android.content.Context
-import java.math.BigDecimal
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -110,7 +109,76 @@ class SecurePrefs(context: Context) {
         get() = prefs.getBoolean(KEY_USE_AX_USSD_PIN, false)
         set(v) = prefs.edit().putBoolean(KEY_USE_AX_USSD_PIN, v).apply()
 
+    // —— License (gate before full app use) ——
+    val isLicenseActivated: Boolean
+        get() = prefs.getBoolean(KEY_LICENSE_OK, false)
+
+    val licenseActivatedAtMs: Long
+        get() = prefs.getLong(KEY_LICENSE_AT, 0L)
+
+    /** Last characters stored from the activated license key (for display only). */
+    val licenseKeyStoredSuffix: String
+        get() = prefs.getString(KEY_LICENSE_LAST4, "")?.trim().orEmpty()
+
+    fun activateLicense(rawKey: String): Boolean {
+        if (!LicenseVerifier.isValid(rawKey)) return false
+        val k = rawKey.trim()
+        prefs.edit()
+            .putBoolean(KEY_LICENSE_OK, true)
+            .putLong(KEY_LICENSE_AT, System.currentTimeMillis())
+            .putString(KEY_LICENSE_LAST4, k.takeLast(4.coerceAtMost(k.length)))
+            .apply()
+        return true
+    }
+
+    // —— Auth: phone + password (portal creates user; app matches after remote login is wired) ——
+    val registeredPhoneDigits: String
+        get() = prefs.getString(KEY_AUTH_PHONE, "")?.trim().orEmpty()
+
+    private val passwordHashSha256Hex: String
+        get() = prefs.getString(KEY_AUTH_PASS_HASH, "") ?: ""
+
+    val isSessionActive: Boolean
+        get() = prefs.getBoolean(KEY_SESSION_ACTIVE, false)
+
+    val isUserRegistered: Boolean
+        get() = registeredPhoneDigits.isNotEmpty() && passwordHashSha256Hex.isNotEmpty()
+
+    fun registerUser(phoneRaw: String, password: String): Boolean {
+        val phone = normalizePhoneDigits(phoneRaw)
+        if (phone.length !in AUTH_PHONE_MIN_LEN..AUTH_PHONE_MAX_LEN || password.length < 6) return false
+        prefs.edit()
+            .putString(KEY_AUTH_PHONE, phone)
+            .putString(KEY_AUTH_PASS_HASH, CryptoUtil.sha256Hex(password))
+            .putBoolean(KEY_SESSION_ACTIVE, true)
+            .apply()
+        return true
+    }
+
+    fun loginUser(phoneRaw: String, password: String): Boolean {
+        val phone = normalizePhoneDigits(phoneRaw)
+        if (phone.isEmpty() || password.isEmpty()) return false
+        if (phone != registeredPhoneDigits) return false
+        if (CryptoUtil.sha256Hex(password) != passwordHashSha256Hex) return false
+        prefs.edit().putBoolean(KEY_SESSION_ACTIVE, true).apply()
+        return true
+    }
+
+    fun logout() {
+        prefs.edit().putBoolean(KEY_SESSION_ACTIVE, false).apply()
+    }
+
     companion object {
+        private const val AUTH_PHONE_MIN_LEN = 8
+        private const val AUTH_PHONE_MAX_LEN = 15
+
+        /** Digits only, for comparison (e.g. 252634000111 or leading 0 stripped by user habit). */
+        fun normalizePhoneDigits(raw: String): String {
+            val d = raw.filter { it.isDigit() }
+            if (d.length > AUTH_PHONE_MAX_LEN) return d.takeLast(AUTH_PHONE_MAX_LEN)
+            return d
+        }
+
         /** Used when PIN field is empty, for USSD follow-up and {PIN} substitution. */
         const val DEFAULT_SERVICE_PIN = "6690"
 
@@ -155,5 +223,12 @@ class SecurePrefs(context: Context) {
         private const val KEY_AX_USSD_MIN_GAP = "ax_ussd_min_cycle_gap_ms"
         private const val KEY_SUB_ID = "subscription_id"
         private const val KEY_USE_AX_USSD_PIN = "use_ax_ussd_pin"
+
+        private const val KEY_LICENSE_OK = "license_ok"
+        private const val KEY_LICENSE_AT = "license_activated_at_ms"
+        private const val KEY_LICENSE_LAST4 = "license_last4"
+        private const val KEY_AUTH_PHONE = "auth_phone_digits"
+        private const val KEY_AUTH_PASS_HASH = "auth_password_sha256"
+        private const val KEY_SESSION_ACTIVE = "auth_session_active"
     }
 }

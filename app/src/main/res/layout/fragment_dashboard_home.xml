@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/sarif_background"
+    android:clipToPadding="true"
+    android:fillViewport="true"
+    android:paddingTop="@dimen/sarif_home_scroll_padding_top"
+    android:paddingBottom="@dimen/sarif_home_scroll_padding_bottom">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="4dp">
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:alignmentMode="alignMargins"
+            android:columnCount="2"
+            android:rowCount="2"
+            android:useDefaultMargins="false">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginEnd="@dimen/sarif_card_grid_gutter"
+                android:layout_marginBottom="@dimen/sarif_card_grid_gutter"
+                android:minHeight="132dp"
+                app:cardBackgroundColor="@color/sarif_surface"
+                app:cardElevation="4dp"
+                app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_metric_flash" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/dashboard_metric_monitor"
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:textColor="@color/sarif_on_surface_muted" />
+
+                    <TextView
+                        android:id="@+id/textMetricMonitor"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/dashboard_status_idle"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="@color/sarif_on_surface"
+                        tools:text="Running" />
+
+                    <ProgressBar
+                        android:id="@+id/progressMetricMonitor"
+                        style="@style/Widget.Sarif.Progress.MetricAccent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:max="100"
+                        android:progress="35"
+                        tools:progress="100" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginBottom="@dimen/sarif_card_grid_gutter"
+                android:minHeight="132dp"
+                app:cardBackgroundColor="@color/sarif_surface"
+                app:cardElevation="4dp"
+                app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_metric_balance" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/dashboard_metric_balance"
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:textColor="@color/sarif_on_surface_muted" />
+
+                    <TextView
+                        android:id="@+id/textMetricBalance"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:text="@string/label_last_balance_placeholder"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="@color/sarif_on_surface"
+                        tools:text="1 200" />
+
+                    <ProgressBar
+                        android:id="@+id/progressMetricBalance"
+                        style="@style/Widget.Sarif.Progress.Metric"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:max="100"
+                        android:progress="65"
+                        tools:progress="80" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginEnd="@dimen/sarif_card_grid_gutter"
+                android:layout_marginBottom="@dimen/sarif_card_grid_gutter"
+                android:minHeight="132dp"
+                app:cardBackgroundColor="@color/sarif_surface"
+                app:cardElevation="4dp"
+                app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_metric_schedule" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/dashboard_metric_cycle"
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:textColor="@color/sarif_on_surface_muted" />
+
+                    <TextView
+                        android:id="@+id/textMetricCycle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="@color/sarif_on_surface"
+                        tools:text="Every 5 s" />
+
+                    <ProgressBar
+                        android:id="@+id/progressMetricCycle"
+                        style="@style/Widget.Sarif.Progress.Metric"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:max="100"
+                        android:progress="100" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:layout_marginBottom="@dimen/sarif_card_grid_gutter"
+                android:minHeight="132dp"
+                app:cardBackgroundColor="@color/sarif_surface"
+                app:cardElevation="4dp"
+                app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_metric_license" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/dashboard_metric_license"
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:textColor="@color/sarif_on_surface_muted" />
+
+                    <TextView
+                        android:id="@+id/textMetricLicense"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="@color/sarif_on_surface"
+                        tools:text="Active" />
+
+                    <ProgressBar
+                        android:id="@+id/progressMetricLicense"
+                        style="@style/Widget.Sarif.Progress.MetricAccent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:max="100"
+                        android:progress="100"
+                        tools:progress="40" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </GridLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:cardBackgroundColor="@color/sarif_surface"
+            app:cardElevation="4dp"
+            app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
+            app:strokeWidth="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.95"
+                    android:text="@string/dashboard_hero_label"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="@color/sarif_on_surface_muted" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnServing"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:minHeight="56dp"
+                    android:text="@string/btn_start_serving"
+                    android:textAllCaps="false"
+                    android:textSize="16sp"
+                    app:backgroundTint="@color/sarif_primary"
+                    app:cornerRadius="28dp"
+                    app:rippleColor="@color/hero_button_ripple" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/dashboard_quick_actions"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="@color/sarif_on_surface" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="20dp"
+            android:clipToPadding="false"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="12dp"
+                    android:layout_marginBottom="4dp"
+                    app:cardBackgroundColor="@color/sarif_surface"
+                    app:cardElevation="3dp"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.ChipCard"
+                    app:strokeWidth="0dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenAccessibility"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="52dp"
+                        android:paddingStart="20dp"
+                        android:paddingTop="12dp"
+                        android:paddingEnd="20dp"
+                        android:paddingBottom="12dp"
+                        android:text="@string/btn_accessibility_settings"
+                        android:textColor="@color/sarif_primary" />
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/disclaimer_short"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@color/sarif_on_surface_muted" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -1,5 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="md_theme_primary">#1B5E20</color>
-    <color name="md_theme_primary_container">#C8E6C9</color>
+    <!-- Soft UI palette (light grey canvas, blue primary, warm accent) -->
+    <color name="sarif_background">#F5F7FA</color>
+    <color name="sarif_surface">#FFFFFF</color>
+    <color name="sarif_primary">#3B8CFF</color>
+    <color name="sarif_primary_dark">#2563EB</color>
+    <color name="sarif_on_primary">#FFFFFF</color>
+    <color name="sarif_primary_container">#DBEAFE</color>
+    <color name="sarif_on_primary_container">#1E3A5F</color>
+    <color name="sarif_accent">#FF7B54</color>
+    <color name="sarif_accent_soft">#FFE8DF</color>
+    <color name="sarif_on_surface">#1F2937</color>
+    <color name="sarif_on_surface_muted">#6B7280</color>
+    <color name="sarif_outline_soft">#E8ECF2</color>
+
+    <!-- Legacy names used in layouts / selectors -->
+    <color name="md_theme_primary">@color/sarif_primary</color>
+    <color name="md_theme_primary_container">@color/sarif_primary_container</color>
+    <color name="hero_on_gradient">@color/sarif_on_primary</color>
+    <color name="hero_button_surface">#E8F2FF</color>
+    <color name="hero_button_ripple">#80FFFFFF</color>
 </resources>
