@@ -7,9 +7,9 @@
         <item name="colorOnPrimaryContainer">@color/sarif_on_primary_container</item>
         <item name="colorSecondary">@color/sarif_accent</item>
         <item name="colorOnSecondary">@color/sarif_on_primary</item>
-        <item name="android:statusBarColor">@color/sarif_background</item>
-        <item name="android:navigationBarColor">@color/sarif_background</item>
-        <item name="android:windowBackground">@color/sarif_background</item>
+        <item name="android:statusBarColor">@color/sarif_canvas_top</item>
+        <item name="android:navigationBarColor">@color/sarif_canvas_bottom</item>
+        <item name="android:windowBackground">@drawable/bg_app_gradient</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="colorSurface">@color/sarif_surface</item>
@@ -50,7 +50,7 @@
     <!-- Dashboard: flat cards, larger radius (no elevation / shadow) -->
     <style name="ShapeAppearanceOverlay.Sarif.Dashboard.Tile" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">28dp</item>
+        <item name="cornerSize">32dp</item>
     </style>
 
     <style name="ShapeAppearanceOverlay.Sarif.Dashboard.Pill" parent="">

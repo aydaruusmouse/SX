@@ -2,8 +2,11 @@
 <resources>
     <!-- Soft UI palette (light grey canvas, blue primary, warm accent) -->
     <color name="sarif_background">#EFF2F7</color>
+    <!-- Gradient canvas (top ≈ status bar, bottom slightly cooler) -->
+    <color name="sarif_canvas_top">#FAFBFF</color>
+    <color name="sarif_canvas_bottom">#EDF0F7</color>
     <color name="sarif_surface">#FFFFFF</color>
-    <color name="sarif_nav_surface">#FAFBFD</color>
+    <color name="sarif_nav_surface">#F8F9FD</color>
     <color name="sarif_primary">#3B8CFF</color>
     <color name="sarif_primary_dark">#2563EB</color>
     <color name="sarif_on_primary">#FFFFFF</color>

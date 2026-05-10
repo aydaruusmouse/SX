@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/sarif_background"
+    android:background="@android:color/transparent"
     android:clipToPadding="true"
     android:fillViewport="true"
     android:paddingBottom="28dp">
@@ -204,7 +204,7 @@
             android:textAllCaps="false"
             android:textSize="16sp"
             app:backgroundTint="@color/sarif_accent"
-            app:cornerRadius="16dp"
+            app:cornerRadius="32dp"
             app:elevation="0dp"
             app:rippleColor="@color/hero_button_ripple" />
     </LinearLayout>

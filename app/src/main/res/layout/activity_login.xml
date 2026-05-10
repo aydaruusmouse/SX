@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/sarif_background"
+    android:background="@android:color/transparent"
     android:fillViewport="true"
     android:paddingHorizontal="@dimen/sarif_horizontal_inset"
     android:paddingVertical="20dp"
@@ -101,7 +101,7 @@
             android:text="@string/btn_login"
             android:textAllCaps="false"
             app:backgroundTint="@color/sarif_primary"
-            app:cornerRadius="16dp"
+            app:cornerRadius="32dp"
             app:elevation="0dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

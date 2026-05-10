@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/sarif_background"
+    android:background="@android:color/transparent"
     android:clipToPadding="true"
     android:fillViewport="true"
     android:paddingTop="@dimen/sarif_home_scroll_padding_top"
@@ -59,7 +59,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/dashboard_metric_monitor"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
                         android:textColor="@color/sarif_on_surface_muted" />
@@ -120,7 +120,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/dashboard_metric_balance"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
                         android:textColor="@color/sarif_on_surface_muted" />
@@ -184,7 +184,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/dashboard_metric_cycle"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
                         android:textColor="@color/sarif_on_surface_muted" />
@@ -243,7 +243,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/dashboard_metric_license"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
                         android:textColor="@color/sarif_on_surface_muted" />
