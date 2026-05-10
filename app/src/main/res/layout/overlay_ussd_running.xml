@@ -14,8 +14,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="?attr/colorSurface"
-        android:elevation="8dp"
+        android:background="@drawable/bg_overlay_panel"
+        android:elevation="0dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
         android:padding="28dp">

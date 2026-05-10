@@ -13,8 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/label_served_requests"
-        android:textAppearance="?attr/textAppearanceTitleLarge"
-        android:textColor="@color/sarif_on_surface" />
+        android:textAppearance="@style/TextAppearance.Sarif.SectionLabel" />
 
     <TextView
         android:layout_width="match_parent"

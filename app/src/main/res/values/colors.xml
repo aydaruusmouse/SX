@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Soft UI palette (light grey canvas, blue primary, warm accent) -->
-    <color name="sarif_background">#F5F7FA</color>
+    <color name="sarif_background">#EFF2F7</color>
     <color name="sarif_surface">#FFFFFF</color>
+    <color name="sarif_nav_surface">#FAFBFD</color>
     <color name="sarif_primary">#3B8CFF</color>
     <color name="sarif_primary_dark">#2563EB</color>
     <color name="sarif_on_primary">#FFFFFF</color>
@@ -12,7 +13,10 @@
     <color name="sarif_accent_soft">#FFE8DF</color>
     <color name="sarif_on_surface">#1F2937</color>
     <color name="sarif_on_surface_muted">#6B7280</color>
-    <color name="sarif_outline_soft">#E8ECF2</color>
+    <color name="sarif_outline_soft">#E2E8F0</color>
+    <color name="sarif_card_stroke">#E8EDF4</color>
+    <color name="sarif_icon_tile_bg">#EDF2FF</color>
+    <color name="sarif_dashboard_stroke">#DDE3EE</color>
 
     <!-- Legacy names used in layouts / selectors -->
     <color name="md_theme_primary">@color/sarif_primary</color>

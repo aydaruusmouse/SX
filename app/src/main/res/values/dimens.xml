@@ -8,4 +8,5 @@
     <!-- Home scroll: grey background peeks past first/last white blocks -->
     <dimen name="sarif_home_scroll_padding_top">12dp</dimen>
     <dimen name="sarif_home_scroll_padding_bottom">28dp</dimen>
+    <dimen name="sarif_card_stroke_width">1dp</dimen>
 </resources>

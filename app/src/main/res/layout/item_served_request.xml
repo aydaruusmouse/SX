@@ -6,9 +6,10 @@
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
     app:cardBackgroundColor="@color/sarif_surface"
-    app:cardElevation="3dp"
-    app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Card.Medium"
-    app:strokeWidth="0dp">
+    app:cardElevation="0dp"
+    app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Sarif.Dashboard.Tile"
+    app:strokeColor="@color/sarif_dashboard_stroke"
+    app:strokeWidth="@dimen/sarif_card_stroke_width">
 
     <LinearLayout
         android:layout_width="match_parent"

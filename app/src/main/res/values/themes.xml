@@ -17,6 +17,24 @@
         <item name="colorSurfaceContainer">@color/sarif_surface</item>
         <item name="colorSurfaceContainerLow">@color/sarif_surface</item>
         <item name="colorOutlineVariant">@color/sarif_outline_soft</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Sarif.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Sarif.TitleMedium</item>
+    </style>
+
+    <style name="TextAppearance.Sarif.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/sarif_on_surface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.Sarif.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">@color/sarif_on_surface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.Sarif.SectionLabel" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:textColor">@color/sarif_on_surface</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
     <style name="ShapeAppearanceOverlay.Sarif.Card.Medium" parent="">
@@ -27,6 +45,17 @@
     <style name="ShapeAppearanceOverlay.Sarif.ChipCard" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">20dp</item>
+    </style>
+
+    <!-- Dashboard: flat cards, larger radius (no elevation / shadow) -->
+    <style name="ShapeAppearanceOverlay.Sarif.Dashboard.Tile" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">28dp</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.Sarif.Dashboard.Pill" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
     </style>
 
     <style name="Widget.Sarif.Progress.Metric" parent="Widget.AppCompat.ProgressBar.Horizontal">

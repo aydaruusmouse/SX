@@ -15,8 +15,13 @@
         android:background="@color/sarif_surface"
         android:elevation="0dp"
         app:title="@string/dashboard_title"
-        app:titleTextAppearance="?attr/textAppearanceTitleLarge"
+        app:titleTextAppearance="@style/TextAppearance.Sarif.TitleLarge"
         app:titleTextColor="@color/sarif_on_surface" />
+
+    <com.google.android.material.divider.MaterialDivider
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:dividerColor="@color/sarif_outline_soft" />
 
     <FrameLayout
         android:id="@+id/fragmentContainer"
@@ -28,13 +33,20 @@
         android:paddingStart="@dimen/sarif_horizontal_inset"
         android:paddingEnd="@dimen/sarif_horizontal_inset" />
 
+    <com.google.android.material.divider.MaterialDivider
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:dividerColor="@color/sarif_outline_soft" />
+
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/sarif_surface"
-        android:elevation="10dp"
+        android:background="@color/sarif_nav_surface"
+        android:elevation="0dp"
         app:itemIconTint="@color/bottom_nav_color"
+        app:itemPaddingTop="8dp"
+        app:itemPaddingBottom="8dp"
         app:itemRippleColor="@color/sarif_primary_container"
         app:itemTextColor="@color/bottom_nav_color"
         app:labelVisibilityMode="labeled"
