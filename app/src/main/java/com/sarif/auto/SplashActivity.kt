@@ -5,7 +5,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * Chooses login → license → dashboard. Launcher activity.
+ * Chooses login (phone + password + license) or dashboard. Launcher activity.
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -17,14 +17,10 @@ class SplashActivity : AppCompatActivity() {
         val nextClass = when {
             !prefs.isUserRegistered -> LoginActivity::class.java
             !prefs.isSessionActive -> LoginActivity::class.java
-            !prefs.isLicenseActivated -> LicenseActivity::class.java
+            !prefs.isLicenseActivated -> LoginActivity::class.java
             else -> DashboardActivity::class.java
         }
-        val i = Intent(this, nextClass)
-        if (nextClass == LoginActivity::class.java && !prefs.isUserRegistered) {
-            i.putExtra(LoginActivity.EXTRA_START_REGISTER, true)
-        }
-        startActivity(i)
+        startActivity(Intent(this, nextClass))
         finish()
     }
 }

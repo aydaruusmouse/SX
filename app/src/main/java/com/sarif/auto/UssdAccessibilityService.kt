@@ -90,13 +90,14 @@ class UssdAccessibilityService : AccessibilityService() {
                 if (menuKey != null && !looksLikeUssdMenuPrompt(blob) && !looksLikeAmountEntryPrompt(blob) &&
                     !looksLikeMiscInfoEntryPrompt(blob)
                 ) {
-                    // Bank sirta screen: menu path cannot inject. Skip (a) short amount leftovers 12–9999,
-                    // (b) spurious "1" — template "1" is often for maclumadka, but if UI is already bank
-                    // PIN, typing 1 blocks {BANK_PIN}. Maclumad uses looksLikeMiscInfoEntryPrompt, not bank.
+                    // Bank sirta: only skip when template sends "1" while we're already on bank PIN
+                    // (next template line is often another "1" for confirm — do not type that into the secret field).
+                    // Any other all-digit menuKey (e.g. single-digit {BANK_PIN} "2") must inject here; otherwise
+                    // we `continue` forever and the send-money chain hangs.
                     if (looksLikeBankSecretNumberPrompt(blob) &&
                         menuKey.isNotEmpty() &&
                         menuKey.all { it.isDigit() } &&
-                        (menuKey.length in 2..4 || menuKey == "1")
+                        menuKey == "1"
                     ) {
                         Log.w(
                             TAG,
@@ -111,7 +112,10 @@ class UssdAccessibilityService : AccessibilityService() {
                         }, if (fast) 100L else 160L)
                         return
                     }
-                    continue
+                    if (!looksLikeBankSecretNumberPrompt(blob)) {
+                        continue
+                    }
+                    // Bank PIN field but key is not the spurious "1" — fall through and SET_TEXT + Send.
                 }
 
                 injecting = true
@@ -138,22 +142,24 @@ class UssdAccessibilityService : AccessibilityService() {
                 injecting = false
                 val fastXfer = UssdPinBridge.isFastTransferCapture()
                 val delay1 = when {
-                    fastXfer && wasMenuOnly -> 140L
+                    // Send-money menu: staged ~485ms reads felt slower than balance; poll sooner after Send.
+                    fastXfer && wasMenuOnly -> 82L
                     wasMenuOnly -> CAPTURE_DELAY_MENU_MS
-                    fastXfer -> 220L
+                    fastXfer -> 160L
                     else -> CAPTURE_DELAY_AFTER_PIN_MS
                 }
                 val delay2 = when {
-                    fastXfer && wasMenuOnly -> 120L
+                    fastXfer && wasMenuOnly -> 58L
                     wasMenuOnly -> CAPTURE_SECOND_MENU_MS
-                    fastXfer -> 240L
+                    fastXfer -> 175L
                     else -> CAPTURE_SECOND_PASS_MS
                 }
-                val thirdMenuMs = if (fastXfer && wasMenuOnly) 180L else CAPTURE_THIRD_MENU_MS
+                val thirdMenuMs = if (fastXfer && wasMenuOnly) 95L else CAPTURE_THIRD_MENU_MS
                 mainHandler.postDelayed({
                     val first = capturePhoneOrActiveWindowText()
+                    val maxCaptureAttempts = if (fastXfer && wasMenuOnly) 8 else 5
                     fun deliverOrRetryCapture(merged: String, attempt: Int) {
-                        if (isPlausibleUssdCapture(merged) || attempt >= 5) {
+                        if (isPlausibleUssdCapture(merged) || attempt >= maxCaptureAttempts) {
                             if (!isPlausibleUssdCapture(merged)) {
                                 Log.w(TAG, "USSD AX: weak capture after retries attempt=$attempt len=${merged.length}")
                             }
@@ -161,7 +167,11 @@ class UssdAccessibilityService : AccessibilityService() {
                             UssdPinBridge.finishWithCapturedText(merged.ifBlank { null })
                             return
                         }
-                        val wait = (350L + 180L * attempt).coerceAtMost(1000L)
+                        val wait = if (fastXfer && wasMenuOnly) {
+                            (95L + 72L * attempt).coerceAtMost(520L)
+                        } else {
+                            (350L + 180L * attempt).coerceAtMost(1000L)
+                        }
                         Log.w(TAG, "USSD AX: implausible capture (launcher/widget?) retry in ${wait}ms")
                         mainHandler.postDelayed({
                             val snap = capturePhoneOrActiveWindowText()
@@ -331,6 +341,10 @@ class UssdAccessibilityService : AccessibilityService() {
         if (b.contains("waxaad slsh")) return true
         if (b.contains("waxaad") && b.contains("sariftay")) return true
         if (b.contains("tixraac") && (b.contains("sariftay") || b.contains("waxaad"))) return true
+        // Bank-to-account deposit / top-up receipt in USSD (same scoring as flash receipt).
+        if (b.contains("ku shub") || b.contains("shubtey") || b.contains("shubay") || b.contains("shubtay")) return true
+        if (b.contains("bank account") || b.contains("account-kaaga") || b.contains("account kaaga")) return true
+        if (Regex("""(?i)waxaad\s*\$""").containsMatchIn(b) && (b.contains("shub") || b.contains("bank"))) return true
         return false
     }
 
@@ -438,7 +452,8 @@ class UssdAccessibilityService : AccessibilityService() {
                         r.recycle()
                     }
                 }
-                if (bestPhoneBlob.isNotEmpty() && bestPhoneScore >= 80) return bestPhoneBlob
+                val minPhoneSc = if (UssdPinBridge.isFastTransferCapture()) 70 else 80
+                if (bestPhoneBlob.isNotEmpty() && bestPhoneScore >= minPhoneSc) return bestPhoneBlob
                 // Samsung / OEM: USSD can stay open while focus returns to our app — window may not
                 // match [isPhoneStackPackage] but still holds the balance/menu text.
                 for (w in wins) {
@@ -501,7 +516,8 @@ class UssdAccessibilityService : AccessibilityService() {
                                 r.recycle()
                             }
                         }
-                        if (best.isNotEmpty() && bestSc >= 80 && hasCarrierUssdAnchor(best)) {
+                        val minBg = if (UssdPinBridge.isFastTransferCapture()) 70 else 80
+                        if (best.isNotEmpty() && bestSc >= minBg && hasCarrierUssdAnchor(best)) {
                             Log.d(TAG, "USSD AX: capture from background while app focused len=${best.length}")
                             return best
                         }
@@ -880,15 +896,16 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun looksLikeUssdMenuPrompt(blob: String): Boolean {
         val b = blob.lowercase()
-        if (looksLikeUssdPinPrompt(blob)) return false
-        // Strong menu cues first: the same window dump often still contains PIN labels from the
-        // previous step: an early `looksLikeUssdPinPrompt` would wrongly block menu "1" injection.
+        if (BalanceParser.looksLikeTelesom800RootMenuBeforeZaad(blob)) return false
+        // ZAAD service / balance option screens — these must win even if the node dump still contains
+        // “PIN” from the previous step; an early looksLikeUssdPinPrompt-only gate blocked menu “1”
+        // and left users stuck on Dooro adeega / Itus hadhaaga.
         if (b.contains("dooro") && b.contains("adeega")) return true
+        if (b.contains("itus hadhaaga")) return true
+        if (b.contains("lacag dirid")) return true
         if (Regex("""(?m)^\s*1[\).\-\:]""").containsMatchIn(blob)) return true
         if (Regex("""(?m)^\s*2[\).\-\:]""").containsMatchIn(blob)) return true
         if (Regex("""(?i)\b(press|choose|select|dooro|riix)\s*\d+\b""").containsMatchIn(blob)) return true
-        if (b.contains("itus hadhaaga")) return true
-        if (b.contains("lacag dirid")) return true
         if (looksLikeUssdPinPrompt(blob)) return false
         return false
     }
@@ -899,7 +916,7 @@ class UssdAccessibilityService : AccessibilityService() {
         /** First read after PIN+Send — shorter than old 900ms so “Dooro Adeega” feels snappy. */
         private const val CAPTURE_DELAY_AFTER_PIN_MS = 420L
         /** Second read when first pass already looks like service menu (was ~650ms). */
-        private const val CAPTURE_FAST_PIN_MENU_SECOND_MS = 110L
+        private const val CAPTURE_FAST_PIN_MENU_SECOND_MS = 65L
         /** Faster follow-up read after menu digit + Send (PIN path keeps long delays). */
         private const val CAPTURE_DELAY_MENU_MS = 450L
         private const val CAPTURE_SECOND_MENU_MS = 420L

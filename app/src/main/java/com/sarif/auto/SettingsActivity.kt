@@ -37,7 +37,7 @@ class SettingsActivity : AppCompatActivity() {
             return false
         }
         if (!p.isLicenseActivated) {
-            startActivity(Intent(this, LicenseActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            startActivity(Intent(this, LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             finish()
             return false
         }

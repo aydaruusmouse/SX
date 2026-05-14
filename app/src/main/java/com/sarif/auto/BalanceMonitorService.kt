@@ -1,5 +1,6 @@
 package com.sarif.auto
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,13 +8,16 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.telephony.SubscriptionManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,9 +46,11 @@ class BalanceMonitorService : Service() {
         }
 
         isServiceRunning = true
+        val simLine = simSummaryForLog(prefs.subscriptionId)
         Log.i(
             TAG,
-            "onStartCommand: foreground + loop (subId=${prefs.subscriptionId}, interval=${prefs.loopIntervalSeconds}s, axMinGapMs=${prefs.axUssdMinCycleGapMs})"
+            "onStartCommand: foreground + loop ($simLine, interval=${prefs.loopIntervalSeconds}s, " +
+                "axMinGapMs=${prefs.axUssdMinCycleGapMs}, axPinPref=${prefs.useAccessibilityUssdPin})"
         )
         startAsForeground(getString(R.string.notify_text))
         startLoop(prefs)
@@ -144,6 +150,24 @@ class BalanceMonitorService : Service() {
         nm.createNotificationChannel(ch)
     }
 
+    private fun simSummaryForLog(subId: Int): String {
+        if (subId < 0) {
+            return "subId=-1 (default TelephonyManager — pick a SIM in Configuration if you have two)"
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return "subId=$subId"
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return "subId=$subId (no READ_PHONE_STATE for carrier label)"
+        }
+        val sm = getSystemService(SubscriptionManager::class.java) ?: return "subId=$subId"
+        val info = sm.activeSubscriptionInfoList?.firstOrNull { it.subscriptionId == subId }
+            ?: return "subId=$subId (not in active list)"
+        val carrier = info.carrierName?.toString()?.trim().orEmpty()
+        val carrierBit = if (carrier.isNotEmpty()) " $carrier" else ""
+        return "subId=$subId slot=${info.simSlotIndex}$carrierBit"
+    }
+
     private fun startLoop(prefs: SecurePrefs) {
         loopJob?.cancel()
         loopJob = scope.launch(Dispatchers.Default) {
@@ -190,7 +214,12 @@ class BalanceMonitorService : Service() {
 
         broadcastUssdBusy(true)
         try {
-            Log.d(TAG, "runCycle: balance opener lines=${openerSteps.size} subId=$subId (interactive PIN/menu)")
+            Log.d(
+                TAG,
+                "runCycle: balance opener lines=${openerSteps.size} subId=$subId " +
+                    simSummaryForLog(subId).let { "($it)" } +
+                    " (interactive PIN/menu)"
+            )
             postNotificationUpdate(getString(R.string.notify_status_balance))
 
             val executor = UssdExecutor(this, subId)
@@ -272,7 +301,7 @@ class BalanceMonitorService : Service() {
             UssdPinBridge.abortSession()
             UssdPinBridge.abortReadUssdTextCapture()
             val preTransferDelay = if (skipTelesomSlshMinimum) {
-                kotlin.math.max(180L, kotlin.math.min(prefs.stepDelayMs, 420L))
+                kotlin.math.max(120L, kotlin.math.min(prefs.stepDelayMs, 320L))
             } else {
                 prefs.stepDelayMs
             }
@@ -301,7 +330,7 @@ class BalanceMonitorService : Service() {
                     UssdAccessibilityService.dismissUssdBeforeNewSession()
                     // Let BACK close the balance dialog and avoid racing MainActivity relayout / system UI
                     // before *800#; 650ms was often too tight on Samsung.
-                    delay(1100L)
+                    delay(850L)
                 }
                 postNotificationUpdate(getString(R.string.notify_status_sending))
                 val sendOpener = sendSteps.firstOrNull().orEmpty()

@@ -1,0 +1,19 @@
+# Copy to local.properties (same folder). local.properties is gitignored.
+
+# --- Pick ONE way for the app to reach Laravel on your Mac (default port 8001) ---
+
+# A) Android emulator — omit everything; Gradle defaults to http://10.0.2.2:8001
+
+# B) Physical phone over USB — use a fixed URL (no Mac IP in the project).
+#    In local.properties uncomment:
+#license.api.mode=adb_reverse
+#    Then each time you plug in USB, run once:
+#    adb reverse tcp:8001 tcp:8001
+#    Serve: php artisan serve --host=127.0.0.1 --port=8001
+#    (0.0.0.0 is fine too on the Mac.)
+
+# C) Physical phone on same Wi‑Fi — use your Mac's LAN address:
+#license.api.base.url=http://192.168.1.XXX:8001
+
+# Optional: change port everywhere (default 8001)
+#license.api.port=8001

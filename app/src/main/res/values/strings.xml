@@ -18,11 +18,11 @@
     <string name="btn_accessibility_settings">Open Accessibility settings</string>
     <string name="accessibility_service_description">Sarif Auto can type your service PIN into the system USSD window after *222#, because the phone API often does not accept a second PIN-only USSD request. Enable only if you trust this app.</string>
     <string name="toast_enable_accessibility">Turn on the switch above, then enable “Sarif Auto” under Downloaded apps in Accessibility.</string>
-    <string name="hint_balance_steps">Balance USSD (one per line). First *222#, then Service PIN is sent as digits only in a second request after “Enter PIN” (not *222*PIN#).</string>
+    <string name="hint_balance_steps">Balance check only — not the bank-transfer box below. One line per step. Default Hormuud: *222#. Telesom balance is usually *800#, service PIN, then 1 on the ZAAD balance menu. The app will not auto-press 1 on the Telesom “Diwaangeli / Caawimo” root menu. You can split *800# and {PIN} across lines. After “Enter PIN”, only digits are sent.</string>
     <string name="hint_transfer_amount">Transfer amount {AMOUNT} — leave empty to use balance minus reserve</string>
     <string name="hint_transfer_reserve">Keep in wallet when using balance (not full sweep; default 100)</string>
     <string name="hint_transfer_bank_pin">Bank / second PIN for `{BANK_PIN}` in send steps (digits only)</string>
-    <string name="hint_send_steps">{AMOUNT} is whole units only (1.4 → 1, 5.9 → 5). Then 1 on maclumadka, {BANK_PIN}, 1. *220*…# still works.</string>
+    <string name="hint_send_steps">Bank / ZAAD transfer — different from balance lines above. Typical Telesom flow uses *800#, {PIN}, then menu keys 5, 2, 4, 1, then {AMOUNT} and {BANK_PIN} as in the default template — not the short *800# + PIN + 1 path used for balance. {AMOUNT} is whole units (1.4 → 1). *220*…# stacked codes still work.</string>
     <string name="btn_start">Start monitor</string>
     <string name="btn_stop">Stop</string>
     <string name="btn_start_serving">Start serving</string>
@@ -84,15 +84,15 @@
     <string name="dashboard_quick_actions">Quick actions</string>
     <string name="ussd_log_hint">Recent USSD steps from the running session.</string>
     <string name="settings_title">Configuration</string>
-    <string name="settings_intro">USSD steps, SIM, timing, and secrets used by the monitor. Save before starting the service from the dashboard.</string>
+    <string name="settings_intro">USSD steps, SIM, timing, and secrets used by the monitor. Leaving this tab saves your changes; you can also tap Save. Start the monitor from Home.</string>
     <string name="settings_section_transfer">Transfer &amp; PINs</string>
     <string name="settings_section_transfer_sub">Service PIN, recipient, amounts, and bank PIN for send steps.</string>
     <string name="settings_section_sim">SIM &amp; timing</string>
     <string name="settings_section_sim_sub">Which SIM runs USSD and how fast the automation steps.</string>
     <string name="settings_section_accessibility">Accessibility USSD</string>
-    <string name="settings_section_accessibility_sub">Type PIN into the system dialog when the phone API cannot.</string>
+    <string name="settings_section_accessibility_sub">Turn this on, then enable Sarif Auto under Android accessibility. On Samsung, if the service keeps turning off, set this app’s battery usage to Unrestricted.</string>
     <string name="settings_section_scripts">USSD scripts</string>
-    <string name="settings_section_scripts_sub">Balance check lines and money-send template (one line per step).</string>
+    <string name="settings_section_scripts_sub">Top: balance USSD (*222# or *800# + PIN + 1 for balance). Bottom: money-send / bank transfer (*800# + PIN + 5,2,4,1… — separate flow).</string>
     <string name="btn_open_settings">Open configuration</string>
     <string name="btn_save_settings">Save configuration</string>
     <string name="toast_settings_saved">Configuration saved.</string>
@@ -106,9 +106,12 @@
     <string name="btn_activate_license">Activate</string>
     <string name="toast_license_invalid">That license key is not accepted.</string>
     <string name="toast_license_ok">License activated.</string>
+    <string name="toast_license_network">Could not reach license server: %1$s</string>
+    <string name="toast_login_failed_detail">Sign-in failed: %1$s</string>
 
     <string name="login_title">Sign in</string>
     <string name="login_subtitle">Use the phone number and password from your admin (same as on the portal).</string>
+    <string name="login_subtitle_with_license">Enter the phone number, password, and license key your admin gave you. All three are required.</string>
     <string name="register_title">Create account</string>
     <string name="register_subtitle">First time only: enter your phone number and a password (min 6 characters). Must match what the admin set on the portal once you connect the API.</string>
     <string name="hint_phone_login">Phone number</string>
@@ -117,6 +120,7 @@
     <string name="btn_login">Sign in</string>
     <string name="btn_register">Create account</string>
     <string name="toast_auth_fill_fields">Enter phone number and password.</string>
+    <string name="toast_auth_fill_fields_license">Enter phone number, password, and license key.</string>
     <string name="toast_auth_password_mismatch">Passwords do not match.</string>
     <string name="toast_auth_weak">Use 8–15 digits for the phone number and at least 6 characters for the password.</string>
     <string name="toast_auth_failed">Wrong phone number or password.</string>

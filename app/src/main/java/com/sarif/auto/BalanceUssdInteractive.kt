@@ -100,6 +100,7 @@ object BalanceUssdInteractive {
         if (lastResponse.contains("invalid", ignoreCase = true)) return false
         if (lastResponse.contains("select valid", ignoreCase = true)) return false
         if (lastResponse.contains("valid option", ignoreCase = true)) return false
+        if (BalanceParser.looksLikeTelesom800RootMenuBeforeZaad(lastResponse)) return false
         if (BalanceParser.isHardFailure(lastResponse)) return false
         if (lastResponse.contains("pin", ignoreCase = true) &&
             shouldSubmitPin(lastResponse)
@@ -205,6 +206,7 @@ object BalanceUssdInteractive {
         if (low.contains("invalid menu") || low.contains("invalid option")) return false
         if (low.contains("select valid") || low.contains("valid option")) return false
         if (BalanceParser.isHardFailure(openReply)) return false
+        if (BalanceParser.looksLikeTelesom800RootMenuBeforeZaad(openReply)) return false
         // Already on a balance / account line — "1" is wrong and triggers invalid menu.
         if (Regex("""(?i)hadhaageedu|hadhaagaagu|hadhaaga\s+waa|xisaabtaada""").containsMatchIn(openReply)) {
             return false

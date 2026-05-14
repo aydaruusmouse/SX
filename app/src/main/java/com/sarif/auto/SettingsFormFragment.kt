@@ -8,6 +8,7 @@ import android.telephony.SubscriptionManager
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -23,6 +24,9 @@ class SettingsFormFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var prefs: SecurePrefs
+
+    /** [setupSimSpinner] sets selection programmatically; ignore those [onItemSelected] callbacks. */
+    private var simSpinnerSuppressSave = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -46,6 +50,11 @@ class SettingsFormFragment : Fragment() {
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
+        if (hidden && _binding != null) {
+            // Bottom-nav uses hide/show; onPause often does not run while this tab is hidden, so
+            // SIM / accessibility / scripts would not reach SecurePrefs unless the user tapped Save.
+            saveFields()
+        }
         if (!hidden && _binding != null) {
             loadFields()
             setupSimSpinner()
@@ -106,26 +115,44 @@ class SettingsFormFragment : Fragment() {
     }
 
     private fun setupSimSpinner() {
-        val subs = readSubscriptions()
-        val labels = mutableListOf<String>()
-        labels.add(getString(R.string.sim_default))
-        subs.forEach { info ->
-            val id = info.subscriptionId
-            val carrier = info.carrierName?.toString().orEmpty()
-            val label = if (carrier.isNotEmpty()) "$carrier (sub $id)" else "Subscription $id"
-            labels.add(label)
-        }
-        binding.spinnerSim.adapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            labels
-        )
-        val target = prefs.subscriptionId
-        if (target >= 0) {
-            val idx = subs.indexOfFirst { it.subscriptionId == target }
-            if (idx >= 0) {
-                binding.spinnerSim.setSelection(idx + 1)
+        simSpinnerSuppressSave = true
+        try {
+            val subs = readSubscriptions()
+            val labels = mutableListOf<String>()
+            labels.add(getString(R.string.sim_default))
+            subs.forEach { info ->
+                val id = info.subscriptionId
+                val carrier = info.carrierName?.toString().orEmpty()
+                val label = if (carrier.isNotEmpty()) "$carrier (sub $id)" else "Subscription $id"
+                labels.add(label)
             }
+            binding.spinnerSim.adapter = ArrayAdapter(
+                requireContext(),
+                android.R.layout.simple_spinner_dropdown_item,
+                labels
+            )
+            val target = prefs.subscriptionId
+            when {
+                target >= 0 -> {
+                    val idx = subs.indexOfFirst { it.subscriptionId == target }
+                    if (idx >= 0) {
+                        binding.spinnerSim.setSelection(idx + 1)
+                    } else {
+                        binding.spinnerSim.setSelection(0)
+                    }
+                }
+                else -> binding.spinnerSim.setSelection(0)
+            }
+            binding.spinnerSim.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    if (_binding == null || simSpinnerSuppressSave) return
+                    saveFields()
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+        } finally {
+            binding.spinnerSim.post { simSpinnerSuppressSave = false }
         }
     }
 

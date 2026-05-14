@@ -54,13 +54,29 @@ object SendMoneyUssdInteractive {
     private fun looksLikeStaleZaadBalanceOkScreen(text: String): Boolean {
         val t = text.lowercase()
         if (t.length > 900) return false
-        if (!t.contains("ok")) return false
+        // Bank top-up / transfer receipts often repeat "hadhaaga…" plus an OK control — not stale menu.
+        if (looksLikeSendMoneySuccessOrBankReceipt(t)) return false
+        // Avoid "ok" inside words (book, token, account…); match a standalone OK / acknowledgment.
+        if (!Regex("""(?iu)(?<!\p{L})ok(?!\p{L})""").containsMatchIn(text)) return false
         if (!t.contains("hadhaag") && !t.contains("xisaab")) return false
         if (t.contains("dooro") && t.contains("adeega")) return false
         if (t.contains("fadlan") && t.contains("lacag")) return false
         if (t.contains("geli") || t.contains("gali")) return false
         if (t.contains("maclum") || t.contains("macluum")) return false
         return true
+    }
+
+    /** Lines that look like money movement / deposit success, not a stuck ZAAD balance-only overlay. */
+    private fun looksLikeSendMoneySuccessOrBankReceipt(t: String): Boolean {
+        if (t.contains("bank account") || t.contains("account-kaaga") || t.contains("account kaaga")) return true
+        if (t.contains("ku shub") || t.contains("shubtey") || t.contains("shubay") || t.contains("shubtay")) return true
+        if (t.contains("waxaad") && (t.contains("dirtay") || t.contains("sariftay") || t.contains("haysatay"))) return true
+        if (t.contains("ayaad u dirtay") || t.contains("ka heshay")) return true
+        if (t.contains("waxaad slsh")) return true
+        if (t.contains("tixraac") && (t.contains("sariftay") || t.contains("waxaad"))) return true
+        // e.g. "Waxaad $1 ku shubtey bank account…"
+        if (Regex("""(?i)waxaad\s*\$""").containsMatchIn(t) && (t.contains("shub") || t.contains("bank"))) return true
+        return false
     }
 
     private fun shouldInjectSendFollowUpViaAccessibility(step: String): Boolean {
@@ -80,8 +96,13 @@ object SendMoneyUssdInteractive {
         val t = step.trim()
         UssdPinBridge.abortSession()
         UssdAccessibilityService.prepareArmedInjectSession()
-        // 3+ digits: service/bank secrets; 4+ is typical — 3-digit bank BIN must use PIN path, not menu.
-        val isPinStep = t.length in 3..12 && t.all { it.isDigit() }
+        val prefs = SecurePrefs(appCtx)
+        val bankDigits = prefs.transferBankPinPlain.filter { it.isDigit() }
+        val stepDigits = t.filter { it.isDigit() }
+        // 3+ digits: service/bank secrets; also treat full {BANK_PIN} match (1–2 digits) as PIN so we
+        // never arm a menu session on "Fadlan Geli … sirta ee Bangiga" (AX would skip-inject or stall).
+        val isPinStep = (t.length in 3..12 && t.all { it.isDigit() }) ||
+            (bankDigits.isNotEmpty() && stepDigits == bankDigits)
         val deferred = if (isPinStep) {
             UssdPinBridge.beginPinSession(t)
         } else {
@@ -89,10 +110,10 @@ object SendMoneyUssdInteractive {
         }
         UssdAccessibilityService.scheduleArmedInjectKicks()
         val pinDelayMs = when {
-            !isPinStep -> 95L
-            UssdPinBridge.isFastTransferCapture() && t.length >= 6 -> 240L
-            UssdPinBridge.isFastTransferCapture() -> 180L
-            else -> 140L
+            !isPinStep -> 72L
+            UssdPinBridge.isFastTransferCapture() && t.length >= 6 -> 200L
+            UssdPinBridge.isFastTransferCapture() -> 150L
+            else -> 130L
         }
         delay(pinDelayMs)
         val captured = withTimeoutOrNull(32_000L) { deferred.await() }
@@ -106,7 +127,7 @@ object SendMoneyUssdInteractive {
             Log.w(TAG, "sendMoney: menu digit produced stale balance screen — BACK + retry once")
             UssdPinBridge.abortSession()
             UssdAccessibilityService.forceDismissDialog()
-            delay(750L)
+            delay(580L)
             return sendStepThroughAccessibility(appCtx, step, staleMenuRetry + 1)
         }
         if (BalanceParser.isHardFailure(captured)) {
@@ -136,7 +157,7 @@ object SendMoneyUssdInteractive {
 
         val axEnabled = UssdAccessibilityService.isEnabled(appCtx)
         val preferAx = prefs.useAccessibilityUssdPin && axEnabled
-        val delayMs = stepDelayMs.coerceAtLeast(200L)
+        val delayMs = stepDelayMs.coerceAtLeast(160L)
 
         val results = mutableListOf<UssdResult>()
         fun appendAndNotify(r: UssdResult) {
@@ -160,7 +181,7 @@ object SendMoneyUssdInteractive {
             /** True after *800# / *220*…# popup + successful AX PIN — remaining steps use AX, not Telephony. */
             var useAccessibilityFollowUps = assumeAccessibilityMenuFollowUps
             fun betweenStepPause(): Long = if (useAccessibilityFollowUps) {
-                kotlin.math.max(260L, kotlin.math.min(delayMs, 380L))
+                kotlin.math.max(120L, kotlin.math.min(delayMs, 220L))
             } else {
                 delayMs
             }
@@ -183,7 +204,7 @@ object SendMoneyUssdInteractive {
                     Log.i(TAG, "sendMoney: popup opener → AX service PIN, then menu/stacked follow-up")
                     UssdPinBridge.abortSession()
                     val pinDeferred = UssdPinBridge.beginPinSession(pinDigits)
-                    delay(if (fastTransfer) 220L else 300L)
+                    delay(if (fastTransfer) 175L else 280L)
                     val launched = executor.launchSystemUssdPopup(opener)
                     if (!launched) {
                         UssdPinBridge.abortSession()

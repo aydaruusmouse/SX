@@ -1,10 +1,13 @@
 package com.sarif.auto
 
 import android.content.Context
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 class SecurePrefs(context: Context) {
+
+    private val appContext = context.applicationContext
 
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -109,9 +112,23 @@ class SecurePrefs(context: Context) {
         get() = prefs.getBoolean(KEY_USE_AX_USSD_PIN, false)
         set(v) = prefs.edit().putBoolean(KEY_USE_AX_USSD_PIN, v).apply()
 
-    // —— License (gate before full app use) ——
+    // —— License (gate before full app use; RS256 JWT from Laravel, verified offline) ——
     val isLicenseActivated: Boolean
-        get() = prefs.getBoolean(KEY_LICENSE_OK, false)
+        get() {
+            val jwt = licenseJwt ?: return false
+            if (!prefs.getBoolean(KEY_LICENSE_OK, false)) return false
+            val deviceId = getOrCreateDeviceId()
+            return when (LicenseJwtVerifier.verify(appContext, jwt, deviceId)) {
+                LicenseJwtVerifier.Result.Ok -> {
+                    prefs.edit().putLong(KEY_LICENSE_VERIFIED_AT, System.currentTimeMillis()).apply()
+                    true
+                }
+                else -> {
+                    clearLicenseState()
+                    false
+                }
+            }
+        }
 
     val licenseActivatedAtMs: Long
         get() = prefs.getLong(KEY_LICENSE_AT, 0L)
@@ -120,10 +137,62 @@ class SecurePrefs(context: Context) {
     val licenseKeyStoredSuffix: String
         get() = prefs.getString(KEY_LICENSE_LAST4, "")?.trim().orEmpty()
 
-    fun activateLicense(rawKey: String): Boolean {
+    val licenseJwt: String?
+        get() = prefs.getString(KEY_LICENSE_JWT, null)?.trim()?.takeIf { it.isNotEmpty() }
+
+    val licenseLastVerifiedWallMs: Long
+        get() = prefs.getLong(KEY_LICENSE_VERIFIED_AT, 0L)
+
+    /** Stable install-scoped device id for server binding (JWT `did` claim). */
+    fun getOrCreateDeviceId(): String {
+        var id = prefs.getString(KEY_DEVICE_ID, null)?.trim().orEmpty()
+        if (id.isEmpty()) {
+            id = java.util.UUID.randomUUID().toString()
+            prefs.edit().putString(KEY_DEVICE_ID, id).apply()
+        }
+        return id
+    }
+
+    /**
+     * Persists license after server activation. Validates signature, issuer, audience, device, exp
+     * (offline) before storing.
+     */
+    fun setLicenseFromServerJwt(jwt: String, rawKeyForDisplay: String): Boolean {
+        val deviceId = getOrCreateDeviceId()
+        val vr = LicenseJwtVerifier.verify(appContext, jwt.trim(), deviceId)
+        if (vr != LicenseJwtVerifier.Result.Ok) {
+            Log.e(TAG, "JWT verify failed after login: $vr (expected iss=${BuildConfig.LICENSE_JWT_ISS} aud=${BuildConfig.LICENSE_JWT_AUD})")
+            return false
+        }
+        val k = rawKeyForDisplay.trim()
+        val suffix = if (k.isEmpty()) "" else k.takeLast(4.coerceAtMost(k.length))
+        val now = System.currentTimeMillis()
+        prefs.edit()
+            .putString(KEY_LICENSE_JWT, jwt.trim())
+            .putBoolean(KEY_LICENSE_OK, true)
+            .putLong(KEY_LICENSE_AT, now)
+            .putLong(KEY_LICENSE_VERIFIED_AT, now)
+            .putString(KEY_LICENSE_LAST4, suffix)
+            .apply()
+        return true
+    }
+
+    fun clearLicenseState() {
+        prefs.edit()
+            .remove(KEY_LICENSE_JWT)
+            .putBoolean(KEY_LICENSE_OK, false)
+            .remove(KEY_LICENSE_AT)
+            .remove(KEY_LICENSE_LAST4)
+            .remove(KEY_LICENSE_VERIFIED_AT)
+            .apply()
+    }
+
+    /** Local demo keys only; production uses [setLicenseFromServerJwt]. */
+    fun activateLicenseOfflineDemo(rawKey: String): Boolean {
         if (!LicenseVerifier.isValid(rawKey)) return false
         val k = rawKey.trim()
         prefs.edit()
+            .remove(KEY_LICENSE_JWT)
             .putBoolean(KEY_LICENSE_OK, true)
             .putLong(KEY_LICENSE_AT, System.currentTimeMillis())
             .putString(KEY_LICENSE_LAST4, k.takeLast(4.coerceAtMost(k.length)))
@@ -169,6 +238,8 @@ class SecurePrefs(context: Context) {
     }
 
     companion object {
+        private const val TAG = "SarifAuth"
+
         private const val AUTH_PHONE_MIN_LEN = 8
         private const val AUTH_PHONE_MAX_LEN = 15
 
@@ -227,6 +298,9 @@ class SecurePrefs(context: Context) {
         private const val KEY_LICENSE_OK = "license_ok"
         private const val KEY_LICENSE_AT = "license_activated_at_ms"
         private const val KEY_LICENSE_LAST4 = "license_last4"
+        private const val KEY_LICENSE_JWT = "license_jwt"
+        private const val KEY_LICENSE_VERIFIED_AT = "license_last_verified_wall_ms"
+        private const val KEY_DEVICE_ID = "license_device_install_id"
         private const val KEY_AUTH_PHONE = "auth_phone_digits"
         private const val KEY_AUTH_PASS_HASH = "auth_password_sha256"
         private const val KEY_SESSION_ACTIVE = "auth_session_active"

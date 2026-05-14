@@ -22,6 +22,8 @@ object BalanceParser {
         // Generic patterns misread menu indices as amounts (e.g. 2.00) if we don't bail out here.
         if (looksLikeZaadDooroServiceMenuOnlyInternal(normalized)) return null
 
+        if (looksLikeTelesom800RootMenuBeforeZaad(normalized)) return null
+
         // After a TelephonyManager failure (session busy, etc.) the combined dump can still contain
         // the service menu ("1. … 2. …") but no real balance — generic patterns then pick junk like 2.00.
         if (looksLikeUssdFailureWithoutBalanceLine(normalized)) return null
@@ -59,6 +61,16 @@ object BalanceParser {
         }
 
         return null
+    }
+
+    /**
+     * Telesom *800# often shows a **root** menu (e.g. 1 Diwaangeli / 2 Caawimo) before ZAAD’s
+     * “Dooro Adeega” screen. Heuristics that treat “line starting with 1” as balance would pick
+     * registration here — do not auto-send menu [1] for this text.
+     */
+    fun looksLikeTelesom800RootMenuBeforeZaad(s: String): Boolean {
+        val t = s.lowercase()
+        return t.contains("diwaangeli") || t.contains("diwaan geli")
     }
 
     /** Telesom ZAAD main picker after PIN: must press "1" (Itus Hadhaaga) — not a balance screen yet. */

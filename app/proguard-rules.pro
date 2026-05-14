@@ -1,3 +1,5 @@
 -keepattributes *Annotation*
 -keepclassmembers class * extends android.telephony.TelephonyManager$UssdResponseCallback { *; }
 -keep class com.sarif.auto.UssdAccessibilityService { *; }
+-keep class com.auth0.jwt.** { *; }
+-keep class com.auth0.jwt.algorithms.** { *; }
