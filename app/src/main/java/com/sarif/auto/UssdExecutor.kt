@@ -21,7 +21,7 @@ sealed class UssdResult {
     data class Failure(val code: Int, val message: String?) : UssdResult()
 
     companion object {
-        /** No callback from modem/RIL within [UssdExecutor.USSD_CALLBACK_TIMEOUT_MS]. */
+        /** No callback from modem/RIL within the configured Telephony USSD callback timeout. */
         const val FAILURE_USSD_TIMEOUT = -3
         /** Could not launch system phone USSD UI. */
         const val FAILURE_USSD_LAUNCH = -4
@@ -112,7 +112,7 @@ class UssdExecutor(
 
     @RequiresPermission(android.Manifest.permission.CALL_PHONE)
     private suspend fun sendOne(ussd: String): UssdResult =
-        withTimeoutOrNull(USSD_CALLBACK_TIMEOUT_MS) {
+        withTimeoutOrNull(UssdPinBridge.ussdTimings.telephonyCallbackTimeoutMs) {
             suspendCancellableCoroutine { cont ->
                 val tm = telephonyForSub()
                 try {
@@ -157,14 +157,12 @@ class UssdExecutor(
                 }
             }
         } ?: run {
-            Log.e(TAG, "USSD no response after ${USSD_CALLBACK_TIMEOUT_MS}ms (len=${ussd.length})")
+            Log.e(TAG, "USSD no response after ${UssdPinBridge.ussdTimings.telephonyCallbackTimeoutMs}ms (len=${ussd.length})")
             UssdResult.Failure(UssdResult.FAILURE_USSD_TIMEOUT, "timeout")
         }
 
     companion object {
         private const val TAG = "SarifAuto"
-        private const val USSD_CALLBACK_TIMEOUT_MS = 90_000L
-
         /**
          * [failureCode] is from [TelephonyManager.UssdResponseCallback.onReceiveUssdResponseFailed].
          * -1 is commonly USSD_RETURN_FAILURE: network/modem rejected the string (wrong format,

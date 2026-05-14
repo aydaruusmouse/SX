@@ -197,6 +197,8 @@ class BalanceMonitorService : Service() {
     }
 
     private suspend fun runCycle(prefs: SecurePrefs, subId: Int) {
+        UssdPinBridge.applyRuntimeUssdTimings(prefs)
+        val ut = UssdPinBridge.ussdTimings
         val pin = prefs.pin
         val recipient = prefs.recipientMsisdn
         val opener = openerLine(prefs)
@@ -220,7 +222,7 @@ class BalanceMonitorService : Service() {
             if (axBalance && (firstOpenerLine.contains("*800") || firstOpenerLine.contains("*888"))) {
                 Log.d(TAG, "runCycle: dismiss any stale USSD before *800# / *888# balance (long-run hygiene)")
                 UssdAccessibilityService.dismissUssdBeforeNewSession()
-                delay(400L)
+                delay(ut.dismissBeforeAxBalanceMs)
             }
             Log.d(
                 TAG,
@@ -265,7 +267,7 @@ class BalanceMonitorService : Service() {
                 if (BalanceParser.looksLikeUssdFailureWithoutBalanceLine(combined)) {
                     Log.w(TAG, "runCycle: carrier failure detected, adding 15s penalty delay to backoff rate limits")
                     scope.launch { com.sarif.auto.domain.UssdStateObserver.emitBackoff(true) }
-                    delay(15_000L)
+                    delay(ut.carrierFailureBackoffMs)
                     scope.launch { com.sarif.auto.domain.UssdStateObserver.emitBackoff(false) }
                 }
                 Log.d(TAG, "runCycle: balance not > 0 — skip transfer, next loop checks balance again")
@@ -303,7 +305,7 @@ class BalanceMonitorService : Service() {
                 ) {
                     Log.d(TAG, "runCycle: dismiss lingering USSD after skipped transfer (next cycle clean)")
                     UssdAccessibilityService.dismissUssdBeforeNewSession()
-                    delay(500L)
+                    delay(ut.dismissAfterSkipTransferMs)
                 }
                 delay(prefs.stepDelayMs)
                 return
@@ -319,7 +321,7 @@ class BalanceMonitorService : Service() {
             UssdPinBridge.abortSession()
             UssdPinBridge.abortReadUssdTextCapture()
             val preTransferDelay = if (skipTelesomSlshMinimum) {
-                kotlin.math.max(120L, kotlin.math.min(prefs.stepDelayMs, 320L))
+                kotlin.math.max(ut.transferPreDelayMinMs, kotlin.math.min(prefs.stepDelayMs, ut.transferPreDelayCapMs))
             } else {
                 prefs.stepDelayMs
             }
@@ -336,6 +338,9 @@ class BalanceMonitorService : Service() {
             UssdPinBridge.setSendChainPreferredAmountDigits(
                 PlaceholderUssd.formatSendAmountPlaceholder(pendingTransferAmount)
             )
+            UssdPinBridge.setSendChainBankPinDigits(
+                prefs.transferBankPinPlain.filter { it.isDigit() }.takeIf { it.isNotEmpty() }
+            )
             if (sendSteps.isNotEmpty()) {
                 val firstSendForDismiss = sendSteps.firstOrNull()?.trim().orEmpty()
                 if (firstSendForDismiss.isNotEmpty() &&
@@ -348,7 +353,7 @@ class BalanceMonitorService : Service() {
                     UssdAccessibilityService.dismissUssdBeforeNewSession()
                     // Let BACK close the balance dialog and avoid racing MainActivity relayout / system UI
                     // before *800#; 650ms was often too tight on Samsung.
-                    delay(850L)
+                    delay(ut.dismissBeforeTransferMs)
                 }
                 postNotificationUpdate(getString(R.string.notify_status_sending))
                 val sendOpener = sendSteps.firstOrNull().orEmpty()

@@ -83,12 +83,12 @@ class SecurePrefs(context: Context) {
 
 
     var loopIntervalSeconds: Int
-        get() = prefs.getInt(KEY_INTERVAL, 5).coerceAtLeast(1)
+        get() = prefs.getInt(KEY_INTERVAL, 2).coerceAtLeast(1)
         set(v) = prefs.edit().putInt(KEY_INTERVAL, v.coerceAtLeast(1)).apply()
 
     var stepDelayMs: Long
-        get() = prefs.getLong(KEY_STEP_DELAY, DEFAULT_STEP_DELAY_MS).coerceAtLeast(200L)
-        set(v) = prefs.edit().putLong(KEY_STEP_DELAY, v.coerceAtLeast(200L)).apply()
+        get() = prefs.getLong(KEY_STEP_DELAY, DEFAULT_STEP_DELAY_MS).coerceAtLeast(80L)
+        set(v) = prefs.edit().putLong(KEY_STEP_DELAY, v.coerceAtLeast(80L)).apply()
 
     /**
      * When [useAccessibilityUssdPin] is on, minimum pause after a full balance USSD run before the
@@ -111,6 +111,39 @@ class SecurePrefs(context: Context) {
     var useAccessibilityUssdPin: Boolean
         get() = prefs.getBoolean(KEY_USE_AX_USSD_PIN, false)
         set(v) = prefs.edit().putBoolean(KEY_USE_AX_USSD_PIN, v).apply()
+
+    /** USSD timing override; absent key → [UssdTimingKeys.Def.defaultMs]. */
+    fun ussdTimingMs(def: UssdTimingKeys.Def): Long {
+        val base = if (prefs.contains(def.key)) prefs.getLong(def.key, def.defaultMs) else def.defaultMs
+        return if (def.isIntCount) base.coerceAtLeast(def.minMs.coerceAtLeast(1L))
+        else base.coerceAtLeast(def.minMs)
+    }
+
+    fun setUssdTimingMs(def: UssdTimingKeys.Def, value: Long) {
+        val coerced = if (def.isIntCount) value.coerceAtLeast(def.minMs.coerceAtLeast(1L))
+        else value.coerceAtLeast(def.minMs)
+        prefs.edit().putLong(def.key, coerced).apply()
+    }
+
+    fun ussdTimingCsv(key: String, defaultCsv: String): String {
+        if (!prefs.contains(key)) return defaultCsv
+        val s = prefs.getString(key, defaultCsv)?.trim().orEmpty()
+        return if (s.isEmpty()) defaultCsv else s
+    }
+
+    fun setUssdTimingCsv(key: String, value: String) {
+        prefs.edit().putString(key, value.trim()).apply()
+    }
+
+    /** Clears all USSD timing keys so defaults apply again. */
+    fun clearUssdTimingOverrides() {
+        val e = prefs.edit()
+        UssdTimingKeys.DEFINITIONS.forEach { d -> e.remove(d.key) }
+        e.remove(UssdTimingKeys.KEY_AX_INJECT_KICK_DELAYS_MS)
+        e.remove(UssdTimingKeys.KEY_AX_READ_CAPTURE_TICK_MS)
+        e.remove(UssdTimingKeys.KEY_AX_READ_CAPTURE_FINALIZE_MS)
+        e.apply()
+    }
 
     // —— License (gate before full app use; RS256 JWT from Laravel, verified offline) ——
     val isLicenseActivated: Boolean
@@ -273,13 +306,13 @@ class SecurePrefs(context: Context) {
         const val DEFAULT_TRANSFER_RESERVE = "100"
 
         /** Extra time after first USSD before sending PIN (some networks are slow). */
-        private const val DEFAULT_STEP_DELAY_MS = 1500L
+        private const val DEFAULT_STEP_DELAY_MS = 400L
 
         /** Default min gap between full balance USSD cycles when Accessibility PIN is used (ms). */
-        const val DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS = 4500L
+        const val DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS = 2000L
 
         /** Floor for [axUssdMinCycleGapMs] (below this, *222# often fails on the next cycle). */
-        private const val MIN_AX_USSD_CYCLE_GAP_MS = 500L
+        private const val MIN_AX_USSD_CYCLE_GAP_MS = 250L
 
         private const val KEY_PIN = "pin"
         private const val KEY_RECIPIENT = "recipient"

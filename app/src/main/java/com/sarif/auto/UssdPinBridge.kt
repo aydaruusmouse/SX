@@ -23,6 +23,17 @@ object UssdPinBridge {
     @Volatile
     private var fastTransferPostInjectCapture: Boolean = false
 
+    @Volatile
+    private var ussdTimingsInternal: UssdRuntimeTimings = UssdRuntimeTimings.fromKeyDefaults()
+
+    /** Hot-path mirror of [SecurePrefs] USSD timings; refresh via [applyRuntimeUssdTimings]. */
+    val ussdTimings: UssdRuntimeTimings
+        get() = ussdTimingsInternal
+
+    fun applyRuntimeUssdTimings(p: SecurePrefs) {
+        ussdTimingsInternal = UssdRuntimeTimings.fromSecurePrefs(p)
+    }
+
     /**
      * During send-money, balance-derived `{AMOUNT}` (whole units). When the USSD screen is
      * “Fadlan Geli lacagta”, inject this instead of a stray template menu digit (e.g. `4`).
@@ -31,8 +42,17 @@ object UssdPinBridge {
     var sendChainPreferredAmountDigits: String? = null
         private set
 
+    /** Digits-only bank USSD secret; used when AX sees bank PIN screen but the template step is still `{AMOUNT}`. */
+    @Volatile
+    var sendChainBankPinDigits: String? = null
+        private set
+
     fun setSendChainPreferredAmountDigits(digits: String?) {
         sendChainPreferredAmountDigits = digits?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun setSendChainBankPinDigits(digits: String?) {
+        sendChainBankPinDigits = digits?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private var pending: CompletableDeferred<String?>? = null
@@ -98,6 +118,7 @@ object UssdPinBridge {
     /** Clears send-money-only context (call when the monitor cycle ends). */
     fun clearSendMoneySessionHints() {
         sendChainPreferredAmountDigits = null
+        sendChainBankPinDigits = null
     }
 
     /**

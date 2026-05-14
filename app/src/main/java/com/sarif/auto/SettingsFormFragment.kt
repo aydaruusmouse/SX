@@ -13,6 +13,8 @@ import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.sarif.auto.databinding.FragmentSettingsFormBinding
 
 /**
@@ -24,6 +26,8 @@ class SettingsFormFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var prefs: SecurePrefs
+
+    private val ussdTimingEdits = mutableListOf<Pair<UssdTimingKeys.Def, TextInputEditText>>()
 
     /** [setupSimSpinner] sets selection programmatically; ignore those [onItemSelected] callbacks. */
     private var simSpinnerSuppressSave = false
@@ -43,6 +47,12 @@ class SettingsFormFragment : Fragment() {
         binding.btnSaveSettings.setOnClickListener {
             saveFields()
             Toast.makeText(requireContext(), R.string.toast_settings_saved, Toast.LENGTH_SHORT).show()
+        }
+        binding.btnResetUssdTimings.setOnClickListener {
+            prefs.clearUssdTimingOverrides()
+            loadUssdTimingFields()
+            UssdPinBridge.applyRuntimeUssdTimings(prefs)
+            Toast.makeText(requireContext(), R.string.toast_ussd_timings_reset, Toast.LENGTH_SHORT).show()
         }
         loadFields()
         setupSimSpinner()
@@ -70,6 +80,7 @@ class SettingsFormFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        ussdTimingEdits.clear()
         _binding = null
     }
 
@@ -85,6 +96,7 @@ class SettingsFormFragment : Fragment() {
         binding.inputBalanceSteps.setText(prefs.balanceUssdSteps)
         binding.inputSendSteps.setText(prefs.sendMoneySteps)
         binding.switchAxUssdPin.isChecked = prefs.useAccessibilityUssdPin
+        loadUssdTimingFields()
     }
 
     private fun saveFields() {
@@ -112,6 +124,8 @@ class SettingsFormFragment : Fragment() {
             -1
         }
         prefs.useAccessibilityUssdPin = binding.switchAxUssdPin.isChecked
+        saveUssdTimingFields()
+        UssdPinBridge.applyRuntimeUssdTimings(prefs)
     }
 
     private fun setupSimSpinner() {
@@ -164,5 +178,65 @@ class SettingsFormFragment : Fragment() {
         }
         val sm = requireContext().getSystemService(SubscriptionManager::class.java) ?: return emptyList()
         return sm.activeSubscriptionInfoList?.sortedBy { it.simSlotIndex } ?: emptyList()
+    }
+
+    private fun ensureUssdTimingRowsInflated() {
+        if (binding.containerUssdTimings.childCount > 0) return
+        val inflater = LayoutInflater.from(requireContext())
+        for (def in UssdTimingKeys.DEFINITIONS) {
+            val row = inflater.inflate(R.layout.item_ussd_timing_field, binding.containerUssdTimings, false)
+            val til = row.findViewById<TextInputLayout>(R.id.timingInputLayout)
+            til.hint = getString(def.labelRes)
+            val et = row.findViewById<TextInputEditText>(R.id.inputUssdTiming)
+            ussdTimingEdits.add(def to et)
+            binding.containerUssdTimings.addView(row)
+        }
+    }
+
+    private fun loadUssdTimingFields() {
+        ensureUssdTimingRowsInflated()
+        for ((def, et) in ussdTimingEdits) {
+            val v = prefs.ussdTimingMs(def)
+            et.setText(if (def.isIntCount) v.toInt().toString() else v.toString())
+        }
+        binding.inputAxInjectKickDelaysCsv.setText(
+            prefs.ussdTimingCsv(
+                UssdTimingKeys.KEY_AX_INJECT_KICK_DELAYS_MS,
+                UssdTimingKeys.DEFAULT_AX_INJECT_KICK_DELAYS_MS
+            )
+        )
+        binding.inputAxReadCaptureTickCsv.setText(
+            prefs.ussdTimingCsv(
+                UssdTimingKeys.KEY_AX_READ_CAPTURE_TICK_MS,
+                UssdTimingKeys.DEFAULT_AX_READ_CAPTURE_TICK_MS
+            )
+        )
+        binding.inputAxReadCaptureFinalizeCsv.setText(
+            prefs.ussdTimingCsv(
+                UssdTimingKeys.KEY_AX_READ_CAPTURE_FINALIZE_MS,
+                UssdTimingKeys.DEFAULT_AX_READ_CAPTURE_FINALIZE_MS
+            )
+        )
+    }
+
+    private fun saveUssdTimingFields() {
+        ensureUssdTimingRowsInflated()
+        for ((def, et) in ussdTimingEdits) {
+            val raw = et.text?.toString()?.trim().orEmpty()
+            val parsed = if (raw.isEmpty()) def.defaultMs else raw.toLongOrNull() ?: def.defaultMs
+            prefs.setUssdTimingMs(def, parsed)
+        }
+        prefs.setUssdTimingCsv(
+            UssdTimingKeys.KEY_AX_INJECT_KICK_DELAYS_MS,
+            binding.inputAxInjectKickDelaysCsv.text?.toString().orEmpty()
+        )
+        prefs.setUssdTimingCsv(
+            UssdTimingKeys.KEY_AX_READ_CAPTURE_TICK_MS,
+            binding.inputAxReadCaptureTickCsv.text?.toString().orEmpty()
+        )
+        prefs.setUssdTimingCsv(
+            UssdTimingKeys.KEY_AX_READ_CAPTURE_FINALIZE_MS,
+            binding.inputAxReadCaptureFinalizeCsv.text?.toString().orEmpty()
+        )
     }
 }

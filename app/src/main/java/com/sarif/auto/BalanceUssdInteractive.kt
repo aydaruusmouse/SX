@@ -14,10 +14,11 @@ import java.math.BigDecimal
 object BalanceUssdInteractive {
 
     private const val TAG = "SarifAuto"
-    private const val MAX_EXTRA_STEPS = 12
-    /** ZAAD/modem often needs time after the first USSD text before accepting the PIN dial. */
-    private const val MIN_DELAY_BEFORE_PIN_MS = 3_000L
 
+    private fun timingLookup(prefs: SecurePrefs): (String) -> Long {
+        val byKey = UssdTimingKeys.DEFINITIONS.associateBy { it.key }
+        return { k -> prefs.ussdTimingMs(byKey.getValue(k)) }
+    }
     /**
      * Balance openers that share the *222#-style flow: after AX PIN, may need forced menu **1**,
      * and a shorter post-open pause when the opener runs via Accessibility.
@@ -77,7 +78,8 @@ object BalanceUssdInteractive {
      */
     private suspend fun sendPinDigitsWithRetry(
         executor: UssdExecutor,
-        pinDigits: String
+        pinDigits: String,
+        retryAfterFailMs: Long,
     ): List<UssdResult> {
         val out = mutableListOf<UssdResult>()
         var r = executor.sendOneStep(pinDigits)
@@ -88,7 +90,7 @@ object BalanceUssdInteractive {
                 r.code == TelephonyManager.USSD_RETURN_FAILURE
             )
         if (retry) {
-            delay(2_500L)
+            delay(retryAfterFailMs)
             r = executor.sendOneStep(pinDigits + "#")
             out.add(r)
             logUssdOutcome("PIN 2nd (digits+#)", r)
@@ -135,7 +137,8 @@ object BalanceUssdInteractive {
     private suspend fun mergeMenuStepWithAxReadIfNeeded(
         appCtx: Context,
         prefs: SecurePrefs,
-        apiResult: UssdResult
+        apiResult: UssdResult,
+        menuMergeReadTimeoutMs: Long,
     ): UssdResult {
         if (apiResult !is UssdResult.Message) return apiResult
         if (!prefs.useAccessibilityUssdPin || !UssdAccessibilityService.isEnabled(appCtx)) {
@@ -145,7 +148,7 @@ object BalanceUssdInteractive {
         val deferred = UssdPinBridge.beginReadUssdTextCapture()
         UssdAccessibilityService.scheduleReadCaptureAssisted()
         val snapshot = try {
-            withTimeoutOrNull(11_000L) { deferred.await() }
+            withTimeoutOrNull(menuMergeReadTimeoutMs) { deferred.await() }
         } finally {
             UssdPinBridge.abortReadUssdTextCapture()
         }
@@ -158,13 +161,26 @@ object BalanceUssdInteractive {
         appCtx: Context,
         prefs: SecurePrefs,
         executor: UssdExecutor,
+        tm: (String) -> Long,
         quickSend: Boolean = false
     ): UssdResult {
         // *800# / *888#: still wait briefly so the USSD layer shows the menu before injecting "1"
         // (immediate inject often hits "invalid menu / select valid option").
-        val preAwait = if (quickSend) 240L else 450L
-        val retryPauseLong = if (quickSend) 380L else 1_400L
-        val retryPauseShort = if (quickSend) 160L else 350L
+        val preAwait = if (quickSend) {
+            tm("ussd_t_balance_menu_one_pre_await_quick_ms")
+        } else {
+            tm("ussd_t_balance_menu_one_pre_await_slow_ms")
+        }
+        val retryPauseLong = if (quickSend) {
+            tm("ussd_t_balance_menu_one_retry_long_quick_ms")
+        } else {
+            tm("ussd_t_balance_menu_one_retry_long_slow_ms")
+        }
+        val retryPauseShort = if (quickSend) {
+            tm("ussd_t_balance_menu_one_retry_short_quick_ms")
+        } else {
+            tm("ussd_t_balance_menu_one_retry_short_slow_ms")
+        }
         val useAx = prefs.useAccessibilityUssdPin && UssdAccessibilityService.isEnabled(appCtx)
         if (useAx) {
             UssdAccessibilityService.prepareArmedInjectSession()
@@ -173,7 +189,7 @@ object BalanceUssdInteractive {
             UssdAccessibilityService.scheduleArmedInjectKicks()
             // *222# / *880#: brief pause so IME does not steal USSD; *800# / *888#: shorter settle (see preAwait).
             if (preAwait > 0L) delay(preAwait)
-            var captured = withTimeoutOrNull(22_000L) { deferred.await() }
+            var captured = withTimeoutOrNull(tm("ussd_t_balance_menu_one_ax_timeout_first_ms")) { deferred.await() }
             if (captured.isNullOrBlank()) {
                 Log.w(TAG, "interactive: menu key AX timeout, retry after pause (focus may have left USSD)")
                 UssdPinBridge.abortSession()
@@ -182,7 +198,7 @@ object BalanceUssdInteractive {
                 val deferred2 = UssdPinBridge.beginMenuSession("1")
                 UssdAccessibilityService.scheduleArmedInjectKicks()
                 delay(retryPauseShort)
-                captured = withTimeoutOrNull(18_000L) { deferred2.await() }
+                captured = withTimeoutOrNull(tm("ussd_t_balance_menu_one_ax_timeout_retry_ms")) { deferred2.await() }
             }
             if (!captured.isNullOrBlank()) {
                 Log.d(TAG, "interactive: menu key 1 sent via Accessibility len=${captured.length}")
@@ -192,7 +208,7 @@ object BalanceUssdInteractive {
             Log.w(TAG, "interactive: menu key AX failed after retry, falling back to TelephonyManager")
         }
         val apiMenu = executor.sendOneStep("1")
-        return mergeMenuStepWithAxReadIfNeeded(appCtx, prefs, apiMenu)
+        return mergeMenuStepWithAxReadIfNeeded(appCtx, prefs, apiMenu, tm("ussd_t_balance_menu_merge_read_timeout_ms"))
     }
 
     /**
@@ -245,6 +261,10 @@ object BalanceUssdInteractive {
     ): List<UssdResult> {
         val appCtx = context.applicationContext
         val prefs = SecurePrefs(appCtx)
+        UssdPinBridge.applyRuntimeUssdTimings(prefs)
+        val tm = timingLookup(prefs)
+        val maxExtraSteps = tm("ussd_t_balance_max_extra_steps").toInt()
+        val minDelayBeforePinMs = tm("ussd_t_balance_min_delay_before_pin_ms")
         val pinDigits = PlaceholderUssd.resolvePinDigitsForUssd(pin)
         val expanded = PlaceholderUssd.expandBalanceSteps(rawTemplate, pin, recipient)
         if (expanded.isEmpty()) return emptyList()
@@ -265,7 +285,7 @@ object BalanceUssdInteractive {
             onEachStep?.invoke(n, r)
         }
 
-        val delayMs = stepDelayMs.coerceAtLeast(200L)
+        val delayMs = stepDelayMs.coerceAtLeast(tm("ussd_t_balance_interactive_step_floor_ms"))
         suspend fun delayStep() = delay(delayMs)
         var submittedPinThisRun = false
         var sentMenuOneAfterPin = false
@@ -298,7 +318,7 @@ object BalanceUssdInteractive {
                     return results
                 }
 
-                val afterPinText = withTimeoutOrNull(36_000L) { pinDeferred.await() }
+                val afterPinText = withTimeoutOrNull(tm("ussd_t_balance_pin_after_open_timeout_ms")) { pinDeferred.await() }
                 if (afterPinText.isNullOrBlank()) {
                     Log.w(TAG, "interactive: AX PIN session timed out, falling back to read capture")
                     UssdPinBridge.abortSession()
@@ -306,7 +326,7 @@ object BalanceUssdInteractive {
                     val deferred = UssdPinBridge.beginReadUssdTextCapture()
                     UssdAccessibilityService.scheduleReadCaptureAssisted()
                     val openerText = try {
-                        withTimeoutOrNull(14_000L) { deferred.await() }
+                        withTimeoutOrNull(tm("ussd_t_balance_opener_read_fallback_timeout_ms")) { deferred.await() }
                     } finally {
                         UssdPinBridge.abortReadUssdTextCapture()
                     }
@@ -372,7 +392,7 @@ object BalanceUssdInteractive {
                                     !quickMenuOne || shouldOfferBalanceMenuOneAfterPinReply(openReply)
                                 if (offerForcedMenuOne) {
                                     Log.d(TAG, "interactive: forced menu key 1 after opener PIN stage")
-                                    appendAndNotify(sendMenuOne(appCtx, prefs, executor, quickSend = quickMenuOne))
+                                    appendAndNotify(sendMenuOne(appCtx, prefs, executor, tm, quickSend = quickMenuOne))
                                     sentMenuOneAfterPin = true
                                 } else {
                                     Log.d(
@@ -380,12 +400,12 @@ object BalanceUssdInteractive {
                                         "interactive: defer menu 1 (*800/*888) — " +
                                             "PIN reply not picker-shaped; refresh USSD text then loop"
                                     )
-                                    delay(450L)
+                                    delay(tm("ussd_t_balance_defer_menu_refresh_ms"))
                                     UssdPinBridge.abortReadUssdTextCapture()
                                     val readDef = UssdPinBridge.beginReadUssdTextCapture()
                                     UssdAccessibilityService.scheduleReadCaptureAssisted()
                                     val refreshed = try {
-                                        withTimeoutOrNull(12_000L) { readDef.await() }.orEmpty()
+                                        withTimeoutOrNull(tm("ussd_t_balance_read_menu_after_pin_timeout_ms")) { readDef.await() }.orEmpty()
                                     } finally {
                                         UssdPinBridge.abortReadUssdTextCapture()
                                     }
@@ -401,18 +421,20 @@ object BalanceUssdInteractive {
                 val postOpenPauseMs = when {
                     useAxForOpen && quickMenuOne -> 0L
                     useAxForOpen && isZaadStyleBalanceOpener(singleOpener) ->
-                        delayMs.coerceIn(150L..400L)
-                    else -> maxOf(delayMs, MIN_DELAY_BEFORE_PIN_MS)
+                        delayMs.coerceIn(
+                            tm("ussd_t_balance_post_open_pause_quick_min_ms")..tm("ussd_t_balance_post_open_pause_quick_max_ms")
+                        )
+                    else -> maxOf(delayMs, minDelayBeforePinMs)
                 }
                 delay(postOpenPauseMs)
             } else {
                 appendAndNotify(executor.sendOneStep(singleOpener))
-                delay(maxOf(delayMs, MIN_DELAY_BEFORE_PIN_MS))
+                delay(maxOf(delayMs, minDelayBeforePinMs))
             }
         }
 
         var extra = 0
-        while (extra < MAX_EXTRA_STEPS) {
+        while (extra < maxExtraSteps) {
             val parsed = BalanceParser.parseLargestPositiveAmount(combinedText())
             if (parsed != null && parsed > BigDecimal.ZERO) {
                 Log.d(TAG, "interactive: balance parsed=$parsed")
@@ -447,8 +469,8 @@ object BalanceUssdInteractive {
                         Log.i(TAG, "interactive: PIN via Accessibility (system USSD dialog)")
                         UssdPinBridge.abortSession()
                         val deferred = UssdPinBridge.beginPinSession(pinDigits)
-                        delay(500L)
-                        val captured = withTimeoutOrNull(28_000L) { deferred.await() }
+                        delay(tm("ussd_t_balance_ax_pin_step_delay_ms"))
+                        val captured = withTimeoutOrNull(tm("ussd_t_balance_ax_pin_step_timeout_ms")) { deferred.await() }
                         if (captured == null) {
                             UssdPinBridge.abortSession()
                             Log.w(TAG, "interactive: Accessibility PIN timeout")
@@ -465,7 +487,7 @@ object BalanceUssdInteractive {
                             )
                         }
                         Log.d(TAG, "interactive: PIN via TelephonyManager len=${pinDigits.length}")
-                        val pinRound = sendPinDigitsWithRetry(executor, pinDigits)
+                        val pinRound = sendPinDigitsWithRetry(executor, pinDigits, tm("ussd_t_balance_pin_retry_after_fail_ms"))
                         pinRound.forEach { appendAndNotify(it) }
                         extra += pinRound.size
                         submittedPinThisRun = true
@@ -483,7 +505,7 @@ object BalanceUssdInteractive {
                         "interactive: sending menu key 1 " +
                             "(numberedMenu=$explicitMenu, postPinFallback=${!explicitMenu && submittedPinThisRun})"
                     )
-                    appendAndNotify(sendMenuOne(appCtx, prefs, executor, quickSend = quickMenuOne))
+                    appendAndNotify(sendMenuOne(appCtx, prefs, executor, tm, quickSend = quickMenuOne))
                     sentMenuOneAfterPin = true
                     extra++
                     if (!quickMenuOne) delayStep()

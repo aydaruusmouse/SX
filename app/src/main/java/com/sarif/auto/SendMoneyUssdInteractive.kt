@@ -93,6 +93,7 @@ object SendMoneyUssdInteractive {
         step: String,
         staleMenuRetry: Int = 0
     ): UssdResult {
+        val ut = UssdPinBridge.ussdTimings
         val t = step.trim()
         UssdPinBridge.abortSession()
         UssdAccessibilityService.prepareArmedInjectSession()
@@ -110,13 +111,13 @@ object SendMoneyUssdInteractive {
         }
         UssdAccessibilityService.scheduleArmedInjectKicks()
         val pinDelayMs = when {
-            !isPinStep -> 72L
-            UssdPinBridge.isFastTransferCapture() && t.length >= 6 -> 200L
-            UssdPinBridge.isFastTransferCapture() -> 150L
-            else -> 130L
+            !isPinStep -> ut.sendArmDelayNonPinMs
+            UssdPinBridge.isFastTransferCapture() && t.length >= 6 -> ut.sendArmDelayPinFastLongMs
+            UssdPinBridge.isFastTransferCapture() -> ut.sendArmDelayPinFastShortMs
+            else -> ut.sendArmDelayPinSlowMs
         }
         delay(pinDelayMs)
-        val captured = withTimeoutOrNull(32_000L) { deferred.await() }
+        val captured = withTimeoutOrNull(ut.sendAxFollowTimeoutMs) { deferred.await() }
         if (captured.isNullOrBlank()) {
             UssdPinBridge.abortSession()
             Log.w(TAG, "sendMoney: AX follow-up timeout stepLen=${t.length}")
@@ -127,7 +128,7 @@ object SendMoneyUssdInteractive {
             Log.w(TAG, "sendMoney: menu digit produced stale balance screen — BACK + retry once")
             UssdPinBridge.abortSession()
             UssdAccessibilityService.forceDismissDialog()
-            delay(580L)
+            delay(ut.sendStaleMenuRetryMs)
             return sendStepThroughAccessibility(appCtx, step, staleMenuRetry + 1)
         }
         if (BalanceParser.isHardFailure(captured)) {
@@ -152,12 +153,14 @@ object SendMoneyUssdInteractive {
         assumeAccessibilityMenuFollowUps: Boolean = false
     ): List<UssdResult> = withContext(Dispatchers.Main) {
         val appCtx = context.applicationContext
+        UssdPinBridge.applyRuntimeUssdTimings(prefs)
+        val ut = UssdPinBridge.ussdTimings
         val trimmed = steps.map { it.trim() }.filter { it.isNotEmpty() }
         if (trimmed.isEmpty()) return@withContext emptyList()
 
         val axEnabled = UssdAccessibilityService.isEnabled(appCtx)
         val preferAx = prefs.useAccessibilityUssdPin && axEnabled
-        val delayMs = stepDelayMs.coerceAtLeast(160L)
+        val delayMs = stepDelayMs.coerceAtLeast(ut.sendStepDelayFloorMs)
 
         val results = mutableListOf<UssdResult>()
         fun appendAndNotify(r: UssdResult) {
@@ -181,7 +184,7 @@ object SendMoneyUssdInteractive {
             /** True after *800# / *220*…# popup + successful AX PIN — remaining steps use AX, not Telephony. */
             var useAccessibilityFollowUps = assumeAccessibilityMenuFollowUps
             fun betweenStepPause(): Long = if (useAccessibilityFollowUps) {
-                kotlin.math.max(120L, kotlin.math.min(delayMs, 220L))
+                kotlin.math.max(ut.sendBetweenStepMenuMinMs, kotlin.math.min(delayMs, ut.sendBetweenStepMenuMaxMs))
             } else {
                 delayMs
             }
@@ -204,7 +207,7 @@ object SendMoneyUssdInteractive {
                     Log.i(TAG, "sendMoney: popup opener → AX service PIN, then menu/stacked follow-up")
                     UssdPinBridge.abortSession()
                     val pinDeferred = UssdPinBridge.beginPinSession(pinDigits)
-                    delay(if (fastTransfer) 175L else 280L)
+                    delay(if (fastTransfer) ut.sendOpenerPinDelayFastMs else ut.sendOpenerPinDelaySlowMs)
                     val launched = executor.launchSystemUssdPopup(opener)
                     if (!launched) {
                         UssdPinBridge.abortSession()
@@ -216,7 +219,7 @@ object SendMoneyUssdInteractive {
                         )
                         return@withContext results
                     }
-                    val captured = withTimeoutOrNull(40_000L) { pinDeferred.await() }
+                    val captured = withTimeoutOrNull(ut.sendPinAfterOpenTimeoutMs) { pinDeferred.await() }
                     if (captured.isNullOrBlank()) {
                         UssdPinBridge.abortSession()
                         Log.w(TAG, "sendMoney: AX PIN timeout after transfer opener")

@@ -24,6 +24,7 @@ class UssdAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        UssdPinBridge.applyRuntimeUssdTimings(SecurePrefs(this))
     }
 
     override fun onDestroy() {
@@ -54,15 +55,16 @@ class UssdAccessibilityService : AccessibilityService() {
         menuKey: String?,
         inputToInject: String
     ) {
+        val ut = UssdPinBridge.ussdTimings
         if (injecting) return
-        if (UssdPinBridge.sessionAgeMs() > SESSION_MAX_MS) {
+        if (UssdPinBridge.sessionAgeMs() > ut.axSessionMaxMs) {
             UssdPinBridge.abortSession()
             consecutiveFillNoClick = 0
             return
         }
 
         val now = SystemClock.elapsedRealtime()
-        val debounceMs = if (menuKey != null) 55L else 400L
+        val debounceMs = if (menuKey != null) ut.axInjectDebounceMenuMs else ut.axInjectDebouncePinMs
         if (consecutiveFillNoClick > 0 && now - lastFailureElapsed < debounceMs) return
 
         val roots = collectCandidateRoots()
@@ -72,17 +74,31 @@ class UssdAccessibilityService : AccessibilityService() {
                 val blob = dumpNodeTexts(root)
                 if (!isLikelyUssdWindow(pkg, blob)) continue
                 if (pin != null && !looksLikeArmedPinEntryScreen(blob)) continue
+                val prefAmount = UssdPinBridge.sendChainPreferredAmountDigits
+                val bankPinDigits = UssdPinBridge.sendChainBankPinDigits
+                val substitutingBankPinOnBankSirta = menuKey != null &&
+                    looksLikeBankSecretNumberPrompt(blob) &&
+                    isArmedMenuKeySendAmount(menuKey, prefAmount) &&
+                    !bankPinDigits.isNullOrBlank()
                 val fillText = when {
                     pin != null -> pin
                     menuKey != null -> {
-                        val pref = UssdPinBridge.sendChainPreferredAmountDigits
-                        if (looksLikeAmountEntryPrompt(blob) && !pref.isNullOrBlank()) {
-                            if (pref != menuKey) {
-                                Log.d(TAG, "USSD AX: lacagta screen — inject $pref not template $menuKey")
+                        val pref = prefAmount
+                        when {
+                            substitutingBankPinOnBankSirta -> {
+                                Log.d(
+                                    TAG,
+                                    "USSD AX: bank secret prompt but armed send amount ($menuKey) — injecting bank PIN"
+                                )
+                                bankPinDigits!!
                             }
-                            pref
-                        } else {
-                            menuKey
+                            looksLikeAmountEntryPrompt(blob) && !pref.isNullOrBlank() -> {
+                                if (pref != menuKey) {
+                                    Log.d(TAG, "USSD AX: lacagta screen — inject $pref not template $menuKey")
+                                }
+                                pref
+                            }
+                            else -> menuKey
                         }
                     }
                     else -> inputToInject
@@ -90,6 +106,23 @@ class UssdAccessibilityService : AccessibilityService() {
                 if (menuKey != null && !looksLikeUssdMenuPrompt(blob) && !looksLikeAmountEntryPrompt(blob) &&
                     !looksLikeMiscInfoEntryPrompt(blob)
                 ) {
+                    if (looksLikeBankSecretNumberPrompt(blob) &&
+                        isArmedMenuKeySendAmount(menuKey, prefAmount) &&
+                        bankPinDigits.isNullOrBlank()
+                    ) {
+                        Log.w(
+                            TAG,
+                            "USSD AX: bank sirta + armed amount $menuKey but bank PIN not configured — skip inject"
+                        )
+                        consecutiveFillNoClick = 0
+                        val fastNoPin = UssdPinBridge.isFastTransferCapture()
+                        mainHandler.postDelayed({
+                            val merged = capturePhoneOrActiveWindowText().ifBlank { blob }
+                            Log.d(TAG, "USSD AX: skip-inject capture len=${merged.length} preview=${merged.take(160)}")
+                            UssdPinBridge.finishWithCapturedText(merged.ifBlank { null })
+                        }, if (fastNoPin) ut.axSkipInjectDeliverFastMs else ut.axSkipInjectDeliverSlowMs)
+                        return
+                    }
                     // Bank sirta: only skip when template sends "1" while we're already on bank PIN
                     // (next template line is often another "1" for confirm — do not type that into the secret field).
                     // Any other all-digit menuKey (e.g. single-digit {BANK_PIN} "2") must inject here; otherwise
@@ -109,7 +142,7 @@ class UssdAccessibilityService : AccessibilityService() {
                             val merged = capturePhoneOrActiveWindowText().ifBlank { blob }
                             Log.d(TAG, "USSD AX: skip-inject capture len=${merged.length} preview=${merged.take(160)}")
                             UssdPinBridge.finishWithCapturedText(merged.ifBlank { null })
-                        }, if (fast) 100L else 160L)
+                        }, if (fast) ut.axSkipInjectDeliverFastMs else ut.axSkipInjectDeliverSlowMs)
                         return
                     }
                     if (!looksLikeBankSecretNumberPrompt(blob)) {
@@ -120,15 +153,16 @@ class UssdAccessibilityService : AccessibilityService() {
 
                 injecting = true
                 val wasMenuOnly = menuKey != null
-                val filled = fillInput(root, fillText, preferPlainFieldForMenu = wasMenuOnly)
+                val preferPlainMenuField = wasMenuOnly && !substitutingBankPinOnBankSirta
+                val filled = fillInput(root, fillText, preferPlainFieldForMenu = preferPlainMenuField)
                 val clicked = if (filled) clickConfirm(root) else false
                 if (!filled || !clicked) {
                     Log.w(TAG, "USSD AX: pkg=$pkg fill=$filled click=$clicked (fail streak=$consecutiveFillNoClick)")
                     consecutiveFillNoClick++
                     lastFailureElapsed = SystemClock.elapsedRealtime()
                     injecting = false
-                    if (consecutiveFillNoClick >= MAX_FAIL_STREAK) {
-                        Log.e(TAG, "USSD AX: abort after $MAX_FAIL_STREAK failed inject attempts")
+                    if (consecutiveFillNoClick >= ut.axMaxFailStreak) {
+                        Log.e(TAG, "USSD AX: abort after ${ut.axMaxFailStreak} failed inject attempts")
                         consecutiveFillNoClick = 0
                         UssdPinBridge.finishWithCapturedText(null)
                     }
@@ -142,22 +176,25 @@ class UssdAccessibilityService : AccessibilityService() {
                 injecting = false
                 val fastXfer = UssdPinBridge.isFastTransferCapture()
                 val delay1 = when {
-                    // Send-money menu: staged ~485ms reads felt slower than balance; poll sooner after Send.
-                    fastXfer && wasMenuOnly -> 82L
-                    wasMenuOnly -> CAPTURE_DELAY_MENU_MS
-                    fastXfer -> 160L
-                    else -> CAPTURE_DELAY_AFTER_PIN_MS
+                    fastXfer && wasMenuOnly -> ut.axFastXferMenuCaptureFirstMs
+                    wasMenuOnly -> ut.axCaptureDelayMenuMs
+                    fastXfer -> ut.axFastXferAfterPinFirstMs
+                    else -> ut.axCaptureDelayAfterPinMs
                 }
                 val delay2 = when {
-                    fastXfer && wasMenuOnly -> 58L
-                    wasMenuOnly -> CAPTURE_SECOND_MENU_MS
-                    fastXfer -> 175L
-                    else -> CAPTURE_SECOND_PASS_MS
+                    fastXfer && wasMenuOnly -> ut.axFastXferMenuCaptureSecondMs
+                    wasMenuOnly -> ut.axCaptureSecondMenuMs
+                    fastXfer -> ut.axFastXferAfterPinSecondMs
+                    else -> ut.axCaptureSecondPassMs
                 }
-                val thirdMenuMs = if (fastXfer && wasMenuOnly) 95L else CAPTURE_THIRD_MENU_MS
+                val thirdMenuMs = if (fastXfer && wasMenuOnly) ut.axFastXferThirdMenuMs else ut.axCaptureThirdMenuMs
                 mainHandler.postDelayed({
                     val first = capturePhoneOrActiveWindowText()
-                    val maxCaptureAttempts = if (fastXfer && wasMenuOnly) 8 else 5
+                    val maxCaptureAttempts = if (fastXfer && wasMenuOnly) {
+                        ut.axMenuMaxCaptureAttemptsFast
+                    } else {
+                        ut.axMenuMaxCaptureAttemptsSlow
+                    }
                     fun deliverOrRetryCapture(merged: String, attempt: Int) {
                         if (isPlausibleUssdCapture(merged) || attempt >= maxCaptureAttempts) {
                             if (!isPlausibleUssdCapture(merged)) {
@@ -168,9 +205,11 @@ class UssdAccessibilityService : AccessibilityService() {
                             return
                         }
                         val wait = if (fastXfer && wasMenuOnly) {
-                            (95L + 72L * attempt).coerceAtMost(520L)
+                            (ut.axImplausibleRetryBaseMs + ut.axImplausibleRetryStepMs * attempt)
+                                .coerceAtMost(ut.axImplausibleFastCapMs)
                         } else {
-                            (350L + 180L * attempt).coerceAtMost(1000L)
+                            (ut.axImplausibleSlowBaseMs + ut.axImplausibleSlowStepMs * attempt)
+                                .coerceAtMost(ut.axImplausibleSlowCapMs)
                         }
                         Log.w(TAG, "USSD AX: implausible capture (launcher/widget?) retry in ${wait}ms")
                         mainHandler.postDelayed({
@@ -186,7 +225,7 @@ class UssdAccessibilityService : AccessibilityService() {
                             val second = capturePhoneOrActiveWindowText()
                             val merged = selectBetterUssdCapture(first, second)
                             deliverOrRetryCapture(merged, 0)
-                        }, CAPTURE_FAST_PIN_MENU_SECOND_MS)
+                        }, ut.axCaptureFastPinMenuSecondMs)
                     } else {
                         mainHandler.postDelayed({
                             val second = capturePhoneOrActiveWindowText()
@@ -849,6 +888,17 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** True when the armed menu step is the send-money amount (e.g. `0.3`), not a menu index. */
+    private fun isArmedMenuKeySendAmount(menuKey: String, preferredAmount: String?): Boolean {
+        val m = menuKey.trim()
+        if (m.contains('.') && m.matches(Regex("""^\d+\.\d{1,6}$"""))) return true
+        val pref = preferredAmount?.trim()
+        if (pref.isNullOrEmpty()) return false
+        // Require a decimal on at least one side so `1` (menu) is not treated as amount `1`.
+        if (!m.contains('.') && !pref.contains('.')) return false
+        return m == pref
+    }
+
     /**
      * Dara-Salaam / bank USSD: “Fadlan Geli Numberkaaga sirta ee Bangiga” (no English “pin” word).
      */
@@ -934,17 +984,6 @@ class UssdAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "SarifAuto"
-        private const val CAPTURE_SECOND_PASS_MS = 650L
-        /** First read after PIN+Send — shorter than old 900ms so “Dooro Adeega” feels snappy. */
-        private const val CAPTURE_DELAY_AFTER_PIN_MS = 420L
-        /** Second read when first pass already looks like service menu (was ~650ms). */
-        private const val CAPTURE_FAST_PIN_MENU_SECOND_MS = 65L
-        /** Faster follow-up read after menu digit + Send (PIN path keeps long delays). */
-        private const val CAPTURE_DELAY_MENU_MS = 450L
-        private const val CAPTURE_SECOND_MENU_MS = 420L
-        private const val CAPTURE_THIRD_MENU_MS = 750L
-        private const val SESSION_MAX_MS = 60_000L
-        private const val MAX_FAIL_STREAK = 6
 
         @Volatile
         private var instance: UssdAccessibilityService? = null
@@ -986,6 +1025,7 @@ class UssdAccessibilityService : AccessibilityService() {
          */
         fun scheduleArmedInjectKicks() {
             val s = instance ?: return
+            val ut = UssdPinBridge.ussdTimings
             val runTry: () -> Unit = {
                 val pin = UssdPinBridge.armedPin
                 val menuKey = UssdPinBridge.armedMenuKey
@@ -995,8 +1035,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
             }
             s.mainHandler.post { runTry() }
-            val delays = longArrayOf(12L, 28L, 55L, 95L, 150L, 230L, 360L)
-            for (d in delays) {
+            for (d in ut.axInjectKickDelaysMs) {
                 s.mainHandler.postDelayed({ runTry() }, d)
             }
         }
@@ -1007,12 +1046,13 @@ class UssdAccessibilityService : AccessibilityService() {
          */
         fun scheduleReadCaptureAssisted() {
             val s = instance ?: return
-            val delays = longArrayOf(250L, 700L, 1400L, 2600L)
-            for (d in delays) {
+            val ut = UssdPinBridge.ussdTimings
+            for (d in ut.axReadCaptureTickMs) {
                 s.mainHandler.postDelayed({ s.tickReadCaptureSnapshot() }, d)
             }
-            s.mainHandler.postDelayed({ s.finalizeReadCaptureSnapshot() }, 4200L)
-            s.mainHandler.postDelayed({ s.finalizeReadCaptureSnapshot() }, 8500L)
+            for (d in ut.axReadCaptureFinalizeMs) {
+                s.mainHandler.postDelayed({ s.finalizeReadCaptureSnapshot() }, d)
+            }
         }
 
         /** Labels on Sarif Auto main screen — never auto-click via accessibility. */
