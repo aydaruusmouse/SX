@@ -75,11 +75,11 @@ object TransferCalculatorUseCase {
                         ) {
                             return BigDecimal.ZERO
                         }
-                        return wholeUnitsDown(bd)
+                        return wholeUnitsDown(bd, hint)
                     }
                 }
             }
-            return wholeUnitsDown(sweep)
+            return wholeUnitsDown(sweep, hint)
         }
 
         if (configured.isNotEmpty()) {
@@ -90,28 +90,36 @@ object TransferCalculatorUseCase {
                 ) {
                     return BigDecimal.ZERO
                 }
-                return wholeUnitsDown(bd)
+                return wholeUnitsDown(bd, hint)
             }
         }
 
         val last = lastParsedBalance.toBigDecimalOrNull()
         if (last != null && last > BigDecimal.ZERO) {
+            val lastHint = currencyHintFromUssd("")
             return wholeUnitsDown(
                 applyTelesomTransferRules(
                     last,
                     reserve,
-                    currencyHintFromUssd(""),
+                    lastHint,
                     skipTelesomSlshMinimum
-                )
+                ),
+                lastHint
             )
         }
 
         return BigDecimal.ZERO
     }
 
-    /** USSD `{AMOUNT}` is whole units only — 1.2 → 1 (truncate toward zero). */
-    private fun wholeUnitsDown(amt: BigDecimal): BigDecimal {
+    /**
+     * USSD `{AMOUNT}` is usually whole units (1.2 → 1). For **USD** (or UNKNOWN) amounts strictly
+     * below 1 unit, keep two decimal places so a $0.06 wallet is not rounded to 0 for transfer.
+     */
+    private fun wholeUnitsDown(amt: BigDecimal, hint: CurrencyHint): BigDecimal {
         if (amt <= BigDecimal.ZERO) return BigDecimal.ZERO
+        if (amt < BigDecimal.ONE && (hint == CurrencyHint.USD || hint == CurrencyHint.UNKNOWN)) {
+            return amt.setScale(2, RoundingMode.DOWN)
+        }
         return amt.setScale(0, RoundingMode.DOWN)
     }
 
@@ -125,11 +133,22 @@ object TransferCalculatorUseCase {
         currency: CurrencyHint,
         skipSlshMinimum: Boolean
     ): BigDecimal {
-        val balW = balance.setScale(0, RoundingMode.DOWN)
-        val resW = reserve.setScale(0, RoundingMode.DOWN)
+        // SLSH wallets are whole-shilling; USD / *800# ZAAD wallet lines use $ and cents — do not floor
+        // balance to 0 before subtracting reserve or "reserve >= balance" never fires for sub-$1 wallets.
+        val fractional = currency == CurrencyHint.USD || skipSlshMinimum
+        val balW = if (fractional) {
+            balance.setScale(6, RoundingMode.DOWN)
+        } else {
+            balance.setScale(0, RoundingMode.DOWN)
+        }
+        val resW = if (fractional) {
+            reserve.setScale(6, RoundingMode.DOWN)
+        } else {
+            reserve.setScale(0, RoundingMode.DOWN)
+        }
         var amt = balW.subtract(resW).stripTrailingZeros()
-        if (skipSlshMinimum && amt <= BigDecimal.ZERO && balW > BigDecimal.ZERO && resW >= balW) {
-            // *800# / *888#: reserve defaults (e.g. 100) often exceed small USD balances — send full balance.
+        if (skipSlshMinimum && amt <= BigDecimal.ZERO && balance > BigDecimal.ZERO && resW >= balW) {
+            // *800# / *888#: default reserve (e.g. 100) often exceeds the whole wallet — send all of it.
             amt = balW
         }
         if (amt <= BigDecimal.ZERO) return BigDecimal.ZERO
@@ -137,9 +156,10 @@ object TransferCalculatorUseCase {
             return amt
         }
         // SLSH + UNKNOWN: Telesom shilling minimum (>500)
-        if (amt <= TELESOM_MIN_TRANSFER_EXCLUSIVE && balW > TELESOM_MIN_TRANSFER_EXCLUSIVE) {
+        val balWhole = balance.setScale(0, RoundingMode.DOWN)
+        if (amt <= TELESOM_MIN_TRANSFER_EXCLUSIVE && balWhole > TELESOM_MIN_TRANSFER_EXCLUSIVE) {
             val bumped = TELESOM_MIN_TRANSFER_EXCLUSIVE.add(BigDecimal.ONE) // 501
-            val maxSend = balW.subtract(BigDecimal.ONE).max(BigDecimal.ZERO)
+            val maxSend = balWhole.subtract(BigDecimal.ONE).max(BigDecimal.ZERO)
             if (bumped <= maxSend) amt = bumped.min(maxSend)
         }
         if (amt <= BigDecimal.ZERO) return BigDecimal.ZERO

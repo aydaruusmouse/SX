@@ -14,6 +14,11 @@ object BalanceParser {
         if (text.isBlank()) return null
         val normalized = text.replace('\u00a0', ' ')
 
+        // RIL sometimes merges an "Invalid MMI / connection problem" banner with unrelated USSD
+        // lines (menu + an old balance fragment). Parsing here drives false "balance already" and
+        // skips the recovery path — treat as no amount.
+        if (looksLikeStackedPhoneUssdModemError(normalized)) return null
+
         // Ignore transfer/receive receipts. While they contain the balance, parsing them here
         // tricks the app into abandoning the active USSD session, leaving it hanging on the screen.
         if (isTransferOrReceiveReceipt(normalized)) return null
@@ -115,6 +120,15 @@ object BalanceParser {
         if (low.contains("waxaad") && low.contains("sariftay")) return true
         if (low.contains("tixraac") && (low.contains("sariftay") || low.contains("waxaad"))) return true
         return false
+    }
+
+    /**
+     * True when the phone/RIL layer reports an invalid MMI or connection problem. Often appears
+     * stacked in one accessibility dump with unrelated carrier text; do not parse amounts from it.
+     */
+    fun looksLikeStackedPhoneUssdModemError(s: String): Boolean {
+        val t = s.lowercase()
+        return t.contains("connection problem") || t.contains("invalid mmi")
     }
 
     /**

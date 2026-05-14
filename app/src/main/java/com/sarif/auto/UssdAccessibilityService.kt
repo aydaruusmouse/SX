@@ -384,10 +384,14 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun selectBetterUssdCapture(a: String, b: String): String {
         val sa = ussdBlobPriorityScore(a)
         val sb = ussdBlobPriorityScore(b)
+        if (sb > sa) return b
+        if (sa > sb) return a
+        val aErr = BalanceParser.looksLikeStackedPhoneUssdModemError(a)
+        val bErr = BalanceParser.looksLikeStackedPhoneUssdModemError(b)
         return when {
-            sb > sa -> b
-            sa > sb -> a
-            b.length > a.length -> b
+            aErr && !bErr -> b
+            !aErr && bErr -> a
+            a.length != b.length -> if (a.length < b.length) a else b
             else -> a
         }
     }
@@ -396,6 +400,18 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun isPlausibleUssdCapture(blob: String): Boolean {
         if (blob.isBlank()) return false
         return ussdBlobPriorityScore(blob) >= 70
+    }
+
+    /** When two windows score the same, prefer a clean snapshot over RIL error stacks and shorter over longer. */
+    private fun preferSameScoreUssdBlobOver(candidate: String, currentBest: String): Boolean {
+        val cErr = BalanceParser.looksLikeStackedPhoneUssdModemError(candidate)
+        val bErr = BalanceParser.looksLikeStackedPhoneUssdModemError(currentBest)
+        return when {
+            cErr && !bErr -> false
+            !cErr && bErr -> true
+            candidate.length < currentBest.length -> true
+            else -> false
+        }
     }
 
     private fun captureBestScoredUssdFromWindows(wins: List<AccessibilityWindowInfo>): Pair<String, Int> {
@@ -410,7 +426,13 @@ class UssdAccessibilityService : AccessibilityService() {
                 if (blob.isEmpty()) continue
                 val sc = ussdBlobPriorityScore(blob)
                 if (sc <= 0) continue
-                if (sc > bestSc || (sc == bestSc && blob.length > best.length)) {
+                val replace = when {
+                    sc > bestSc -> true
+                    sc < bestSc -> false
+                    best.isEmpty() -> true
+                    else -> preferSameScoreUssdBlobOver(blob, best)
+                }
+                if (replace) {
                     bestSc = sc
                     best = blob
                 }

@@ -214,6 +214,14 @@ class BalanceMonitorService : Service() {
 
         broadcastUssdBusy(true)
         try {
+            val firstOpenerLine = openerSteps.firstOrNull().orEmpty()
+            val axBalance = prefs.useAccessibilityUssdPin &&
+                UssdAccessibilityService.isEnabled(applicationContext)
+            if (axBalance && (firstOpenerLine.contains("*800") || firstOpenerLine.contains("*888"))) {
+                Log.d(TAG, "runCycle: dismiss any stale USSD before *800# / *888# balance (long-run hygiene)")
+                UssdAccessibilityService.dismissUssdBeforeNewSession()
+                delay(400L)
+            }
             Log.d(
                 TAG,
                 "runCycle: balance opener lines=${openerSteps.size} subId=$subId " +
@@ -285,8 +293,18 @@ class BalanceMonitorService : Service() {
             if (pendingTransferAmount <= BigDecimal.ZERO) {
                 Log.w(
                     TAG,
-                    "runCycle: transfer amount is 0 — skip transfer, next loop checks balance again (balance=$parsedBalance)"
+                    "runCycle: transfer amount is 0 — skip transfer (balance=$parsedBalance, " +
+                        "reserve=${prefs.transferReservePlain}, configuredSend=${prefs.sendTransferAmountPlain})."
                 )
+                // *800# / *888# balance often leaves "OK" on screen; next *800# + PIN stalls if we do not dismiss.
+                if (skipTelesomSlshMinimum &&
+                    prefs.useAccessibilityUssdPin &&
+                    UssdAccessibilityService.isEnabled(this)
+                ) {
+                    Log.d(TAG, "runCycle: dismiss lingering USSD after skipped transfer (next cycle clean)")
+                    UssdAccessibilityService.dismissUssdBeforeNewSession()
+                    delay(500L)
+                }
                 delay(prefs.stepDelayMs)
                 return
             }

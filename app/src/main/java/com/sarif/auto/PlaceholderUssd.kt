@@ -59,6 +59,10 @@ object PlaceholderUssd {
      */
     fun formatSendAmountPlaceholder(amount: BigDecimal): String {
         if (amount <= BigDecimal.ZERO) return "0"
+        // Sub–whole-unit amounts (e.g. $0.06) come from [TransferCalculatorUseCase]; keep decimals for *800# USD.
+        if (amount < BigDecimal.ONE) {
+            return amount.setScale(2, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        }
         return amountDigitsForUssd(amount)
     }
 

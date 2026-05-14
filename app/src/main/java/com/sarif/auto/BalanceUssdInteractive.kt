@@ -328,12 +328,6 @@ object BalanceUssdInteractive {
                     val haveBalanceAlready = BalanceParser.parseLargestPositiveAmount(combinedText())
                         ?.let { it > BigDecimal.ZERO } == true
                     when {
-                        haveBalanceAlready -> {
-                            Log.d(
-                                TAG,
-                                "interactive: skip forced menu 1 — balance already in session after opener"
-                            )
-                        }
                         carrierRejectedPinMessage(openReply) -> {
                             Log.w(
                                 TAG,
@@ -353,30 +347,51 @@ object BalanceUssdInteractive {
                             )
                             UssdAccessibilityService.forceDismissDialog()
                         }
+                        haveBalanceAlready -> {
+                            Log.d(
+                                TAG,
+                                "interactive: skip forced menu 1 — balance already in session after opener"
+                            )
+                        }
                         else -> {
-                            val offerForcedMenuOne =
-                                !quickMenuOne || shouldOfferBalanceMenuOneAfterPinReply(openReply)
-                            if (offerForcedMenuOne) {
-                                Log.d(TAG, "interactive: forced menu key 1 after opener PIN stage")
-                                appendAndNotify(sendMenuOne(appCtx, prefs, executor, quickSend = quickMenuOne))
-                                sentMenuOneAfterPin = true
-                            } else {
+                            val onNumberedServiceMenu =
+                                shouldTryMenuBalanceOption(openReply) ||
+                                    BalanceParser.looksLikeZaadDooroServiceMenuOnly(openReply) ||
+                                    Regex("""(?i)itus\s+hadhaaga""").containsMatchIn(openReply)
+                            // *800#/*888#: PIN capture often already IS the "1. Itus Hadhaaga" picker. Forcing menu 1
+                            // in the same breath races IME/layout (see main-thread jank logs) → invalid menu / MMI noise.
+                            // Defer to the follow-up loop after [postOpenPauseMs], which sends the same key once.
+                            if (isQuickBalanceMenuOneOpener(singleOpener) && onNumberedServiceMenu) {
                                 Log.d(
                                     TAG,
-                                    "interactive: defer menu 1 (*800/*888) — " +
-                                        "PIN reply not picker-shaped; refresh USSD text then loop"
+                                    "interactive: skip forced menu 1 — PIN reply already shows ZAAD service menu " +
+                                        "(defer menu 1 to follow-up loop after settle)"
                                 )
-                                delay(450L)
-                                UssdPinBridge.abortReadUssdTextCapture()
-                                val readDef = UssdPinBridge.beginReadUssdTextCapture()
-                                UssdAccessibilityService.scheduleReadCaptureAssisted()
-                                val refreshed = try {
-                                    withTimeoutOrNull(12_000L) { readDef.await() }.orEmpty()
-                                } finally {
+                            } else {
+                                val offerForcedMenuOne =
+                                    !quickMenuOne || shouldOfferBalanceMenuOneAfterPinReply(openReply)
+                                if (offerForcedMenuOne) {
+                                    Log.d(TAG, "interactive: forced menu key 1 after opener PIN stage")
+                                    appendAndNotify(sendMenuOne(appCtx, prefs, executor, quickSend = quickMenuOne))
+                                    sentMenuOneAfterPin = true
+                                } else {
+                                    Log.d(
+                                        TAG,
+                                        "interactive: defer menu 1 (*800/*888) — " +
+                                            "PIN reply not picker-shaped; refresh USSD text then loop"
+                                    )
+                                    delay(450L)
                                     UssdPinBridge.abortReadUssdTextCapture()
-                                }
-                                if (refreshed.isNotBlank() && refreshed.trim() != openReply.trim()) {
-                                    appendAndNotify(UssdResult.Message(refreshed))
+                                    val readDef = UssdPinBridge.beginReadUssdTextCapture()
+                                    UssdAccessibilityService.scheduleReadCaptureAssisted()
+                                    val refreshed = try {
+                                        withTimeoutOrNull(12_000L) { readDef.await() }.orEmpty()
+                                    } finally {
+                                        UssdPinBridge.abortReadUssdTextCapture()
+                                    }
+                                    if (refreshed.isNotBlank() && refreshed.trim() != openReply.trim()) {
+                                        appendAndNotify(UssdResult.Message(refreshed))
+                                    }
                                 }
                             }
                         }
