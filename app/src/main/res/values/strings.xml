@@ -13,7 +13,7 @@
     <string name="label_sim">SIM for USSD</string>
     <string name="hint_interval">Seconds between full cycles (min 1)</string>
     <string name="hint_step_delay">Milliseconds between USSD steps</string>
-    <string name="hint_ax_ussd_min_gap">Min ms between balance cycles if Accessibility PIN is on (default 2000; floor 250)</string>
+    <string name="hint_ax_ussd_min_gap">Min ms between balance cycles if Accessibility PIN is on (default 1500; floor 250)</string>
     <string name="label_ax_ussd_pin">Enter PIN via Accessibility (USSD dialog)</string>
     <string name="btn_accessibility_settings">Open Accessibility settings</string>
     <string name="accessibility_service_description">Sarif Auto can type your service PIN into the system USSD window after *222#, because the phone API often does not accept a second PIN-only USSD request. Enable only if you trust this app.</string>
@@ -88,7 +88,7 @@
     <string name="settings_section_transfer">Transfer &amp; PINs</string>
     <string name="settings_section_transfer_sub">Service PIN, recipient, amounts, and bank PIN for send steps.</string>
     <string name="settings_section_sim">SIM &amp; timing</string>
-    <string name="settings_section_sim_sub">Which SIM runs USSD and how fast the automation steps.</string>
+    <string name="settings_section_sim_sub">SIM for USSD, seconds between full cycles, and milliseconds between USSD steps.</string>
     <string name="settings_section_accessibility">Accessibility USSD</string>
     <string name="settings_section_accessibility_sub">Turn this on, then enable Sarif Auto under Android accessibility. On Samsung, if the service keeps turning off, set this app’s battery usage to Unrestricted.</string>
     <string name="settings_section_scripts">USSD scripts</string>

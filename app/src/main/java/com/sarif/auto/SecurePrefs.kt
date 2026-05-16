@@ -83,7 +83,7 @@ class SecurePrefs(context: Context) {
 
 
     var loopIntervalSeconds: Int
-        get() = prefs.getInt(KEY_INTERVAL, 2).coerceAtLeast(1)
+        get() = prefs.getInt(KEY_INTERVAL, 1).coerceAtLeast(1)
         set(v) = prefs.edit().putInt(KEY_INTERVAL, v.coerceAtLeast(1)).apply()
 
     var stepDelayMs: Long
@@ -135,7 +135,7 @@ class SecurePrefs(context: Context) {
         prefs.edit().putString(key, value.trim()).apply()
     }
 
-    /** Clears all USSD timing keys so defaults apply again. */
+    /** Clears all USSD timing keys so [UssdTimingKeys] built-in defaults apply again. */
     fun clearUssdTimingOverrides() {
         val e = prefs.edit()
         UssdTimingKeys.DEFINITIONS.forEach { d -> e.remove(d.key) }
@@ -143,6 +143,13 @@ class SecurePrefs(context: Context) {
         e.remove(UssdTimingKeys.KEY_AX_READ_CAPTURE_TICK_MS)
         e.remove(UssdTimingKeys.KEY_AX_READ_CAPTURE_FINALIZE_MS)
         e.apply()
+    }
+
+    /** One-time after advanced timing UI was removed — drop stale per-field overrides. */
+    fun ensureBuiltInUssdTimingsOnly() {
+        if (prefs.getBoolean(KEY_USSD_BUILTIN_TIMINGS_ONLY, false)) return
+        clearUssdTimingOverrides()
+        prefs.edit().putBoolean(KEY_USSD_BUILTIN_TIMINGS_ONLY, true).apply()
     }
 
     // —— License (gate before full app use; RS256 JWT from Laravel, verified offline) ——
@@ -306,10 +313,10 @@ class SecurePrefs(context: Context) {
         const val DEFAULT_TRANSFER_RESERVE = "100"
 
         /** Extra time after first USSD before sending PIN (some networks are slow). */
-        private const val DEFAULT_STEP_DELAY_MS = 400L
+        private const val DEFAULT_STEP_DELAY_MS = 200L
 
         /** Default min gap between full balance USSD cycles when Accessibility PIN is used (ms). */
-        const val DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS = 2000L
+        const val DEFAULT_AX_USSD_MIN_CYCLE_GAP_MS = 1500L
 
         /** Floor for [axUssdMinCycleGapMs] (below this, *222# often fails on the next cycle). */
         private const val MIN_AX_USSD_CYCLE_GAP_MS = 250L
@@ -327,6 +334,7 @@ class SecurePrefs(context: Context) {
         private const val KEY_AX_USSD_MIN_GAP = "ax_ussd_min_cycle_gap_ms"
         private const val KEY_SUB_ID = "subscription_id"
         private const val KEY_USE_AX_USSD_PIN = "use_ax_ussd_pin"
+        private const val KEY_USSD_BUILTIN_TIMINGS_ONLY = "ussd_builtin_timings_only_v1"
 
         private const val KEY_LICENSE_OK = "license_ok"
         private const val KEY_LICENSE_AT = "license_activated_at_ms"

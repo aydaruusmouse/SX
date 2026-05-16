@@ -39,6 +39,7 @@ class BalanceMonitorService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val prefs = SecurePrefs(this)
+        prefs.ensureBuiltInUssdTimingsOnly()
         if (prefs.pin.isBlank()) {
             Log.w(TAG, "onStartCommand: no PIN, stopping")
             stopSelf()
